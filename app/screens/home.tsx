@@ -1,24 +1,25 @@
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
-  Image,
+  Text,
   TouchableOpacity,
-  ActivityIndicator,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 
 import CourseCard from '@/components/CourseCard';
 import FooterNav from '@/components/FooterNav';
-import { courses, Course } from '@/lib/data';
+import { Palette } from '@/constants/theme';
+import { Course, courses } from '@/lib/data';
 
-const HeaderIcon = ({ name, color, size = 20 }) => {
-  const iconPaths = {
+const HeaderIcon = ({ name, color, size = 20 }: { name: 'heart' | 'cart' | 'bell'; color: string; size?: number }) => {
+  const iconPaths: Record<'heart' | 'cart' | 'bell', string> = {
     heart: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
     cart: "M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.9 2 1.99 2 2-.9 2-2-.9-2-2-2z",
     bell: "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z",
@@ -63,8 +64,8 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#1D2B4E" />
-        <Text style={{ marginTop: 10, color: '#333' }}>Loading courses...</Text>
+        <ActivityIndicator size="large" color={Palette.yellow} />
+        <Text style={{ marginTop: 10, color: Palette.textPrimary }}>Loading courses...</Text>
       </SafeAreaView>
     );
   }
@@ -73,7 +74,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <LinearGradient
-        colors={['#1D2B4E', '#4E1D3A']}
+        colors={[Palette.textPrimary, Palette.yellow]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={styles.header}
@@ -88,13 +89,13 @@ export default function HomeScreen() {
           </View>
           <View style={styles.headerIcons}>
             <TouchableOpacity>
-              <HeaderIcon name="heart" color="#FFFFFF" size={22} />
+              <HeaderIcon name="heart" color={Palette.white} size={22} />
             </TouchableOpacity>
             <TouchableOpacity>
-              <HeaderIcon name="cart" color="#FFFFFF" size={22} />
+              <HeaderIcon name="cart" color={Palette.white} size={22} />
             </TouchableOpacity>
             <TouchableOpacity>
-              <HeaderIcon name="bell" color="#FFFFFF" size={22} />
+              <HeaderIcon name="bell" color={Palette.white} size={22} />
             </TouchableOpacity>
           </View>
         </View>
@@ -142,7 +143,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: Palette.white },
   header: {
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
@@ -164,20 +165,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#e0b400',
+    backgroundColor: Palette.yellow,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logo: { width: 28, height: 28, tintColor: '#1D2B4E' },
+  logo: { width: 28, height: 28, tintColor: Palette.textPrimary },
   headerText: { flex: 1, marginLeft: 12 },
-  appName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  tagline: { fontSize: 12, color: '#fff', opacity: 0.9 },
+  appName: { fontSize: 18, fontWeight: 'bold', color: Palette.white },
+  tagline: { fontSize: 12, color: Palette.white, opacity: 0.9 },
   headerIcons: { flexDirection: 'row', gap: 20 },
   content: { paddingHorizontal: 15, paddingTop: 0, paddingBottom: 70 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: Palette.textPrimary,
     marginBottom: 10,
     marginTop: 20,
     paddingLeft: 5,

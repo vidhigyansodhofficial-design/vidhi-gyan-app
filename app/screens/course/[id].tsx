@@ -1,21 +1,22 @@
+import { Palette } from '@/constants/theme';
+import { Course, courses } from '@/lib/data';
+import { useNavigation } from '@react-navigation/native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Platform,
-  ActivityIndicator,
+    ActivityIndicator,
+    Alert,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-import { courses, Course } from '@/lib/data';
-import Svg, { Path } from 'react-native-svg';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import RazorpayCheckout from 'react-native-razorpay';
-import { useNavigation } from '@react-navigation/native';
+import Svg, { Path } from 'react-native-svg';
 
 
 // 🔹 Bootstrap Icon Component
@@ -247,7 +248,7 @@ export default function CourseDetailScreen() {
             </View>
 
             <View style={styles.lecturesRow}>
-              <BootstrapIcon name="book" color="#666" size={14} />
+              <BootstrapIcon name="book" color={Palette.textSecondary} size={14} />
               <Text style={styles.lectures}>{course.lectures} lectures</Text>
             </View>
 
@@ -293,19 +294,19 @@ export default function CourseDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: Palette.white },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: Palette.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#DDD',
+    borderBottomColor: Palette.divider,
   },
   backButton: { marginRight: 12 },
-  backArrow: { fontSize: 20, color: '#333' },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  backArrow: { fontSize: 20, color: Palette.textPrimary },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: Palette.textPrimary },
   contentContainer: { paddingBottom: 100 },
   videoWrapper: {
     width: '100%',
@@ -314,20 +315,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   video: { flex: 1 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  description: { fontSize: 14, color: '#555', lineHeight: 20, marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: 'bold', color: Palette.textPrimary, marginBottom: 8 },
+  description: { fontSize: 14, color: Palette.textSecondary, lineHeight: 20, marginBottom: 16 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   statItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rating: { fontSize: 14, marginLeft: 4 },
-  studentCount: { fontSize: 14, color: '#666', marginLeft: 4 },
-  duration: { fontSize: 14, color: '#666', marginLeft: 4 },
+  studentCount: { fontSize: 14, color: Palette.textSecondary, marginLeft: 4 },
+  duration: { fontSize: 14, color: Palette.textSecondary, marginLeft: 4 },
   lecturesRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 16 },
-  lectures: { fontSize: 14, color: '#666' },
-  instructor: { fontSize: 16, color: '#333', marginBottom: 16 },
+  lectures: { fontSize: 14, color: Palette.textSecondary },
+  instructor: { fontSize: 16, color: Palette.textPrimary, marginBottom: 16 },
   tabs: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#DDD',
+    borderBottomColor: Palette.divider,
     marginBottom: 16,
   },
   tab: {
@@ -335,14 +336,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     borderRightWidth: 1,
-    borderRightColor: '#DDD',
+    borderRightColor: Palette.divider,
   },
-  activeTab: { borderBottomWidth: 2, borderBottomColor: '#0A192F' },
-  tabText: { fontSize: 14, fontWeight: '500', color: '#333' },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 12 },
+  activeTab: { borderBottomWidth: 2, borderBottomColor: Palette.yellow },
+  tabText: { fontSize: 14, fontWeight: '500', color: Palette.textPrimary },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: Palette.textPrimary, marginBottom: 12 },
   learningPoints: { marginBottom: 20 },
   learningPoint: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  pointText: { fontSize: 14, color: '#555', flex: 1, marginLeft: 8 },
+  pointText: { fontSize: 14, color: Palette.textSecondary, flex: 1, marginLeft: 8 },
   syllabusList: { marginBottom: 20 },
   syllabusItem: {
     flexDirection: 'row',
@@ -350,19 +351,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
+    borderBottomColor: Palette.divider,
   },
-  syllabusTitle: { fontSize: 14, color: '#333', flex: 1 },
-  syllabusDuration: { fontSize: 14, color: '#666', marginLeft: 10 },
-  reviewsText: { fontSize: 16, color: '#666', textAlign: 'center', marginTop: 20 },
+  syllabusTitle: { fontSize: 14, color: Palette.textPrimary, flex: 1 },
+  syllabusDuration: { fontSize: 14, color: Palette.textSecondary, marginLeft: 10 },
+  reviewsText: { fontSize: 16, color: Palette.textSecondary, textAlign: 'center', marginTop: 20 },
   continueButton: {
-    backgroundColor: '#0A192F',
+    backgroundColor: Palette.yellow,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 20,
     marginTop: 10,
   },
-  continueText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  continueText: { color: Palette.textPrimary, fontSize: 16, fontWeight: '600' },
   error: { fontSize: 18, color: '#FF0000', textAlign: 'center', marginTop: 20 },
 });

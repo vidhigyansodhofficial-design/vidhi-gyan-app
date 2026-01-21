@@ -1,15 +1,16 @@
 // app/components/FooterNav.tsx
+import { Palette } from '@/constants/theme';
+import { usePathname, useRouter } from 'expo-router';
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ Get safe area insets
 
 // 🔹 Custom SVG Icon Component
 const BootstrapIcon = ({ name, color, size = 24 }: { name: string; color: string; size?: number }) => {
@@ -33,10 +34,10 @@ const BootstrapIcon = ({ name, color, size = 24 }: { name: string; color: string
 export default function FooterNav() {
   const router = useRouter();
   const pathname = usePathname();
-  const insets = useSafeAreaInsets(); // ✅ Get bottom safe area
+  const insets = useSafeAreaInsets();
 
-  const primaryColor = '#0A192F'; // Match your header
-  const inactiveColor = '#8E8E93';
+  const primaryColor = Palette.yellow;
+  const inactiveColor = Palette.textSecondary;
 
   const navItems = [
     { name: 'Home', path: '/screens/home', icon: 'home' },
@@ -84,9 +85,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Palette.white,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: Palette.divider,
     paddingTop: 8,
     position: 'absolute',
     bottom: 0,

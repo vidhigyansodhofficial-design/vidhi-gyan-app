@@ -1,7 +1,8 @@
 // app/components/Header.tsx
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Palette } from '@/constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 interface HeaderProps {
   title?: string;
@@ -14,7 +15,9 @@ export default function Header({
 }: HeaderProps) {
   return (
     <LinearGradient
-      colors={['#1D2B4E', '#4E1D3A']}
+      colors={[Palette.textPrimary, Palette.yellow]}
+      start={{ x: 0, y: 0.5 }}
+      end={{ x: 1, y: 0.5 }}
       style={styles.header}
     >
       <View style={styles.container}>
@@ -33,6 +36,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 16,
   },
   container: { gap: 4 },
-  title: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  subtitle: { fontSize: 12, color: '#fff', opacity: 0.9 },
+  title: { fontSize: 18, fontWeight: 'bold', color: Palette.white },
+  subtitle: { fontSize: 12, color: Palette.white, opacity: 0.9 },
 });

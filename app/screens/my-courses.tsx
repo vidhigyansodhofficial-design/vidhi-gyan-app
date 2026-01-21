@@ -1,19 +1,20 @@
 // app/screens/my-courses.tsx
 
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-} from 'react-native';
-import { useRouter, Stack } from 'expo-router';
-import Header from '@/components/Header';
 import FooterNav from '@/components/FooterNav';
-import SafeScreen from '@/components/SafeScreen'; // ✅
-import { courses, Course } from '@/lib/data';
+import Header from '@/components/Header';
+import SafeScreen from '@/components/SafeScreen';
+import { Palette } from '@/constants/theme';
+import { Course, courses } from '@/lib/data';
+import { Stack, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 // 🔹 Tab
 const Tab = ({ title, isActive, onPress }: { title: string; isActive: boolean; onPress: () => void }) => (
@@ -132,23 +133,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: Palette.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#DDD',
+    borderBottomColor: Palette.divider,
   },
   tab: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#DDD',
+    borderColor: Palette.divider,
   },
   activeTab: {
-    backgroundColor: '#1D2B4E',
-    borderColor: '#1D2B4E',
+    backgroundColor: Palette.yellow,
+    borderColor: Palette.yellow,
   },
-  tabText: { fontSize: 14, color: '#333' },
-  activeTabText: { color: '#FFF' },
+  tabText: { fontSize: 14, color: Palette.textPrimary },
+  activeTabText: { color: Palette.white },
   content: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -156,7 +157,7 @@ const styles = StyleSheet.create({
   },
   courseCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
+    backgroundColor: Palette.white,
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
@@ -169,28 +170,28 @@ const styles = StyleSheet.create({
   courseImageContainer: { width: 100, height: 80 },
   courseImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   courseDetails: { flex: 1, padding: 12, justifyContent: 'space-between' },
-  courseTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  courseInstructor: { fontSize: 14, color: '#666', marginBottom: 8 },
+  courseTitle: { fontSize: 16, fontWeight: 'bold', color: Palette.textPrimary, marginBottom: 4 },
+  courseInstructor: { fontSize: 14, color: Palette.textSecondary, marginBottom: 8 },
   courseMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  metaText: { fontSize: 12, color: '#999' },
+  metaText: { fontSize: 12, color: Palette.textSecondary },
   progressContainer: { marginBottom: 8 },
-  progressText: { fontSize: 12, color: '#666', marginBottom: 4 },
-  progressBar: { height: 6, backgroundColor: '#EEE', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: '#1D2B4E' },
+  progressText: { fontSize: 12, color: Palette.textSecondary, marginBottom: 4 },
+  progressBar: { height: 6, backgroundColor: Palette.divider, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: Palette.yellow },
   continueButton: {
     alignSelf: 'flex-end',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: '#1D2B4E',
+    backgroundColor: Palette.yellow,
   },
-  continueText: { fontSize: 12, color: '#FFF' },
+  continueText: { fontSize: 12, color: Palette.textPrimary },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  emptyText: { fontSize: 18, color: '#666', marginBottom: 8 },
-  emptySubtext: { fontSize: 14, color: '#999', textAlign: 'center', paddingHorizontal: 20 },
+  emptyText: { fontSize: 18, color: Palette.textSecondary, marginBottom: 8 },
+  emptySubtext: { fontSize: 14, color: Palette.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
 });

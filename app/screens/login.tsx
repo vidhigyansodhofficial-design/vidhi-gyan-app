@@ -1,20 +1,20 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  ActivityIndicator,
-} from "react-native";
+import { Palette } from "@/constants/theme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-// Removed Google Auth and AntDesign imports
-import Svg, { Path, SvgProps } from "react-native-svg"; // Added Svg imports
+import React, { useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import Svg, { Path, SvgProps } from "react-native-svg";
 
 // --- NEW Google SVG Icon Component ---
 const GoogleIcon = (props: SvgProps) => (
@@ -70,7 +70,7 @@ export default function AuthScreen() {
   if (showOtpScreen) {
     return (
       <SafeAreaView style={styles.container}>
-        <LinearGradient colors={["#0A192F", "#501E26"]} style={styles.gradient}>
+        <LinearGradient colors={[Palette.textPrimary, Palette.yellow]} style={styles.gradient}>
           <View style={styles.header}>
             <Image
               source={require("../../assets/images/pngtree-law.png")}
@@ -122,7 +122,7 @@ export default function AuthScreen() {
   // ===== LOGIN SCREEN =====
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={["#0A192F", "#501E26"]} style={styles.gradient}>
+      <LinearGradient colors={[Palette.textPrimary, Palette.yellow]} style={styles.gradient}>
         <View style={styles.header}>
           <Image
             source={require("../../assets/images/pngtree-law.png")}
@@ -201,12 +201,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   header: { alignItems: "center", marginBottom: 40 },
-  logo: { width: 70, height: 70, tintColor: "#FFD700", marginBottom: 10 },
-  appName: { fontSize: 24, fontWeight: "bold", color: "#FFF", marginBottom: 5 },
-  tagline: { fontSize: 16, color: "#CCC" },
+  logo: { width: 70, height: 70, tintColor: Palette.yellow, marginBottom: 10 },
+  appName: { fontSize: 24, fontWeight: "bold", color: Palette.white, marginBottom: 5 },
+  tagline: { fontSize: 16, color: Palette.white },
   formContainer: {
     width: "100%",
-    backgroundColor: "#FFF",
+    backgroundColor: Palette.white,
     borderRadius: 20,
     padding: 25,
     elevation: 5,
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#333",
+    color: Palette.textPrimary,
     textAlign: "center",
     marginBottom: 20,
   },
@@ -224,63 +224,63 @@ const styles = StyleSheet.create({
   },
   otpMessageText: {
     fontSize: 16,
-    color: '#666',
+    color: Palette.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
   otpEmailText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: Palette.textPrimary,
     marginTop: 5,
   },
-  label: { fontSize: 14, color: "#666", marginBottom: 5 },
+  label: { fontSize: 14, color: Palette.textSecondary, marginBottom: 5 },
   input: {
     borderWidth: 1,
-    borderColor: "#DDD",
+    borderColor: Palette.divider,
     borderRadius: 10,
     padding: 12,
     marginBottom: 15,
     fontSize: 16,
-    backgroundColor: "#F9F9F9",
+    backgroundColor: Palette.white,
   },
   authButton: {
-    backgroundColor: "#0A192F",
+    backgroundColor: Palette.yellow,
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: "center",
     marginVertical: 10,
   },
-  authButtonText: { color: "#FFF", fontSize: 18, fontWeight: "600" },
-  forgotText: { color: "#007BFF", textAlign: "right", marginBottom: 10 },
+  authButtonText: { color: Palette.textPrimary, fontSize: 18, fontWeight: "600" },
+  forgotText: { color: Palette.yellow, textAlign: "right", marginBottom: 10 },
   divider: {
     flexDirection: "row",
     alignItems: "center",
     marginVertical: 15,
   },
-  line: { flex: 1, height: 1, backgroundColor: "#DDD" },
-  orText: { marginHorizontal: 8, color: "#888" },
+  line: { flex: 1, height: 1, backgroundColor: Palette.divider },
+  orText: { marginHorizontal: 8, color: Palette.textSecondary },
   googleButton: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#DDD",
+    borderColor: Palette.divider,
     paddingVertical: 12,
     borderRadius: 10,
     marginBottom: 10,
   },
   googleText: {
     fontSize: 16,
-    color: "#000",
-    marginLeft: 10, // Adjusted margin for the new icon
+    color: Palette.textPrimary,
+    marginLeft: 10,
     fontWeight: "500",
   },
   footerText: {
     textAlign: "center",
-    color: "#666",
+    color: Palette.textSecondary,
     fontSize: 14,
     marginTop: 10,
   },
-  signupText: { fontWeight: "bold", color: "#0A192F" },
+  signupText: { fontWeight: "bold", color: Palette.yellow },
 });

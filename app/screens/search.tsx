@@ -1,26 +1,27 @@
 // app/screens/search.tsx
 
-import React, { useState, useEffect } from 'react';
+import { Stack, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 
-import Header from '@/components/Header';
 import CourseCard from '@/components/CourseCard';
 import FooterNav from '@/components/FooterNav';
-import SafeScreen from '@/components/SafeScreen'; // ✅ Import SafeScreen
-import { courses, Course } from '@/lib/data';
+import Header from '@/components/Header';
+import SafeScreen from '@/components/SafeScreen';
+import { Palette } from '@/constants/theme';
+import { Course, courses } from '@/lib/data';
 
 // 🔹 Search Icon
-const SearchIcon = ({ color = '#666', size = 20 }) => (
+const SearchIcon = ({ color = Palette.textSecondary, size = 20 }) => (
   <Svg width={size} height={size} viewBox="0 0 16 16" fill={color}>
     <Path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0" />
   </Svg>
@@ -100,13 +101,13 @@ export default function SearchScreen() {
 
         <View style={styles.searchBarContainer}>
           <View style={styles.searchInputWrapper}>
-            <SearchIcon color="#666" size={18} />
+            <SearchIcon color={Palette.textSecondary} size={18} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search for law topics, acts, or instructor"
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholderTextColor="#999"
+              placeholderTextColor={Palette.textSecondary}
             />
           </View>
           <TouchableOpacity style={styles.filterButton}>
@@ -137,7 +138,7 @@ export default function SearchScreen() {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#1D2B4E" />
+              <ActivityIndicator size="large" color={Palette.yellow} />
               <Text style={styles.loadingText}>Searching...</Text>
             </View>
           ) : filteredCourses.length > 0 ? (
@@ -185,30 +186,30 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
+    backgroundColor: Palette.white,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#DDD',
+    borderColor: Palette.divider,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: Palette.textPrimary,
     marginLeft: 8,
   },
   filterButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: '#EEE',
+    backgroundColor: Palette.divider,
     justifyContent: 'center',
     alignItems: 'center',
   },
   filterButtonText: {
     fontSize: 18,
-    color: '#333',
+    color: Palette.textPrimary,
   },
   topicsSection: {
     paddingHorizontal: 16,
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: Palette.textPrimary,
     marginBottom: 12,
   },
   topicsList: {
@@ -228,20 +229,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#EEE',
+    backgroundColor: Palette.divider,
     borderWidth: 1,
-    borderColor: '#DDD',
+    borderColor: Palette.divider,
   },
   topicChipActive: {
-    backgroundColor: '#1D2B4E',
-    borderColor: '#1D2B4E',
+    backgroundColor: Palette.yellow,
+    borderColor: Palette.yellow,
   },
   topicChipText: {
     fontSize: 14,
-    color: '#333',
+    color: Palette.textPrimary,
   },
   topicChipTextActive: {
-    color: '#FFF',
+    color: Palette.textPrimary,
   },
   content: {
     paddingHorizontal: 15,
@@ -250,7 +251,7 @@ const styles = StyleSheet.create({
   },
   resultsCount: {
     fontSize: 14,
-    color: '#666',
+    color: Palette.textSecondary,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -269,7 +270,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: '#666',
+    color: Palette.textSecondary,
   },
   noResults: {
     flex: 1,
@@ -279,12 +280,12 @@ const styles = StyleSheet.create({
   },
   noResultsText: {
     fontSize: 18,
-    color: '#666',
+    color: Palette.textSecondary,
     marginBottom: 8,
   },
   noResultsSubtext: {
     fontSize: 14,
-    color: '#999',
+    color: Palette.textSecondary,
     textAlign: 'center',
     paddingHorizontal: 20,
   },

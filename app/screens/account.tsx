@@ -1,19 +1,20 @@
 // app/screens/account.tsx
 
+import FooterNav from '@/components/FooterNav';
+import Header from '@/components/Header';
+import SafeScreen from '@/components/SafeScreen';
+import { Palette } from '@/constants/theme';
+import { Stack, useRouter } from 'expo-router';
 import React from 'react';
 import {
-    View,
-    Text,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
     Alert,
     Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
-import Header from '@/components/Header';
-import FooterNav from '@/components/FooterNav';
-import SafeScreen from '@/components/SafeScreen';
 import Svg, { Path } from 'react-native-svg';
 
 // 🔹 Bootstrap SVG Icons
@@ -201,18 +202,18 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F5F5',
+        backgroundColor: Palette.white,
     },
     scrollContent: {
-        paddingBottom: 100, // Make space for fixed footer
+        paddingBottom: 100,
     },
     profileContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
-        backgroundColor: '#FFF',
+        backgroundColor: Palette.white,
         borderBottomWidth: 1,
-        borderBottomColor: '#DDD',
+        borderBottomColor: Palette.divider,
     },
     avatar: {
         width: 60,
@@ -226,11 +227,11 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#333',
+        color: Palette.textPrimary,
     },
     userEmail: {
         fontSize: 14,
-        color: '#666',
+        color: Palette.textSecondary,
     },
     editProfileButton: {
         padding: 8,
@@ -239,9 +240,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-around',
         padding: 16,
-        backgroundColor: '#FFF',
+        backgroundColor: Palette.white,
         borderBottomWidth: 1,
-        borderBottomColor: '#DDD',
+        borderBottomColor: Palette.divider,
     },
     statItem: {
         alignItems: 'center',
@@ -249,21 +250,21 @@ const styles = StyleSheet.create({
     statNumber: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#333',
+        color: Palette.textPrimary,
     },
     statHighlight: {
-        color: '#E74C3C',
+        color: Palette.yellow,
     },
     statLabel: {
         fontSize: 14,
-        color: '#666',
+        color: Palette.textSecondary,
     },
     actionCards: {
         paddingHorizontal: 16,
         paddingTop: 12,
     },
     card: {
-        backgroundColor: '#FFF',
+        backgroundColor: Palette.white,
         borderRadius: 12,
         padding: 16,
         marginBottom: 12,
@@ -279,7 +280,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#F0F0F0',
+        backgroundColor: Palette.divider,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
@@ -290,11 +291,11 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: Palette.textPrimary,
     },
     cardSubtitle: {
         fontSize: 14,
-        color: '#666',
+        color: Palette.textSecondary,
         marginTop: 4,
     },
     arrowContainer: {
@@ -302,28 +303,28 @@ const styles = StyleSheet.create({
     },
     arrow: {
         fontSize: 18,
-        color: '#999',
+        color: Palette.textSecondary,
     },
     logoutCard: {
-        borderColor: '#FFEBEE',
+        borderColor: Palette.yellow,
         borderWidth: 1,
     },
     logoutTitle: {
-        color: '#E74C3C',
+        color: Palette.yellow,
     },
     logoutSubtitle: {
-        color: '#E74C3C',
+        color: Palette.yellow,
     },
     logoutArrow: {
-        color: '#E74C3C',
+        color: Palette.yellow,
     },
     versionContainer: {
         padding: 20,
-        backgroundColor: '#F5F5F5',
+        backgroundColor: Palette.white,
         alignItems: 'center',
     },
     versionText: {
         fontSize: 12,
-        color: '#999',
+        color: Palette.textSecondary,
     },
 });

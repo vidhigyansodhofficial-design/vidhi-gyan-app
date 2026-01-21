@@ -1,6 +1,7 @@
+import { Palette } from '@/constants/theme';
+import { Course } from '@/lib/data';
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
-import { Course } from '@/lib/data'; // Assuming Course type has 'isEnrolled?: boolean'
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface CourseCardProps {
   course: Course;
@@ -12,7 +13,7 @@ export default function CourseCard({ course, onPress }: CourseCardProps) {
     return (
       <View style={styles.errorCard}>
         <Text style={{ color: 'red', fontWeight: 'bold' }}>Course not found</Text>
-        <Text style={{ color: '#007bff', marginTop: 4 }}>← Go Back</Text>
+        <Text style={{ color: Palette.yellow, marginTop: 4 }}>← Go Back</Text>
       </View>
     );
   }
@@ -54,69 +55,80 @@ export default function CourseCard({ course, onPress }: CourseCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 250, // A bit wider to match the professional look
-    backgroundColor: '#fff',
+    width: 250,
+    backgroundColor: Palette.white,
     borderRadius: 10,
     marginRight: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 }, // Softer shadow
-    shadowOpacity: 0.1, // Softer shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3, // Softer elevation
+    elevation: 3,
     overflow: 'hidden',
   },
   image: {
     width: '100%',
-    height: 140, // Slightly taller image
+    height: 140,
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
   },
   details: {
-    padding: 12, // A bit more padding
+    padding: 12,
   },
   title: {
-    fontSize: 16, // Larger title
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
-    minHeight: 40, // Ensures space for 2 lines
+    color: Palette.textPrimary,
+    minHeight: 40,
   },
   instructor: {
     fontSize: 13,
-    color: '#666',
+    color: Palette.textSecondary,
     marginTop: 4,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8, // Added margin-top
+    marginTop: 8,
   },
   rating: {
-    color: '#E6A400', // A more golden star color
+    color: Palette.yellow,
     fontSize: 14,
     fontWeight: '600',
   },
   reviews: {
-    color: '#999',
+    color: Palette.textSecondary,
     fontSize: 13,
     marginLeft: 5,
   },
   price: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#1D2B4E',
-    marginTop: 8, // Added margin-top to separate from rating
+    color: Palette.textPrimary,
+    marginTop: 8,
   },
   priceFree: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#008000', // Standard green for 'Free'
-    marginTop: 8, // Added margin-top to separate from rating
+    color: '#008000',
+    marginTop: 8,
+  },
+  enrolledBadge: {
+    backgroundColor: Palette.yellow,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  enrolledText: {
+    color: Palette.textPrimary,
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   errorCard: {
-    width: 250, // Match the new card width
+    width: 250,
     height: 150,
     borderRadius: 10,
-    backgroundColor: '#fff',
+    backgroundColor: Palette.white,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -125,5 +137,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 });
