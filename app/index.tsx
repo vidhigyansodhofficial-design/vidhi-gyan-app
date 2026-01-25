@@ -1,5 +1,4 @@
-// app/index.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,24 +6,42 @@ import {
   Image,
   StyleSheet,
   SafeAreaView,
-  Animated,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  // ================= SESSION CHECK =================
+  useEffect(() => {
+    const checkUserSession = async () => {
+      try {
+        const user = await AsyncStorage.getItem("user");
+        if (user) {
+          // If user exists, skip onboarding and login, go straight to home
+          router.replace("/screens/home");
+        }
+      } catch (e) {
+        console.error("Failed to fetch session", e);
+      }
+    };
+    checkUserSession();
+  }, []);
+
   const slides = [
     {
       title: "Learn Law Smarter",
       description:
-        "Access comprehensive law courses from basics to advanced topics, designed specifically for Indian law students.",
+        "Access comprehensive law courses designed specifically for Indian law students with premium materials.",
       icon: require('../assets/images/pngtree-law.png'),
     },
     {
-      title: "From Experts",
+      title: "Expert Guidance",
       description:
         "Learn from experienced legal professionals and top law faculty with years of teaching experience.",
       icon: require('../assets/images/book-icon.png'),
@@ -32,7 +49,7 @@ export default function OnboardingScreen() {
     {
       title: "Anytime, Anywhere",
       description:
-        "Study at your own pace with high-quality video lectures and study materials available 24/7.",
+        "Study at your own pace with high-quality video lectures available 24/7 on your mobile device.",
       icon: require('../assets/images/video-icon.png'),
     },
   ];
@@ -41,7 +58,6 @@ export default function OnboardingScreen() {
     if (currentIndex < slides.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      // Last slide → go to login
       router.push('/screens/login');
     }
   };
@@ -51,123 +67,171 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#0A192F', '#501E26']} style={styles.gradient}>
-        {/* Icon */}
-        <View style={styles.iconContainer}>
-          <Image
-            source={slides[currentIndex].icon}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-        </View>
+    <View style={styles.mainContainer}>
+      <StatusBar barStyle="light-content" />
+      <LinearGradient 
+        colors={['#0F172A', '#1E293B', '#000000']} 
+        style={styles.gradient}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          
+          {/* Top Skip Button */}
+          <TouchableOpacity onPress={handleSkip} style={styles.skipWrapper}>
+            <Text style={styles.skipText}>SKIP</Text>
+          </TouchableOpacity>
 
-        {/* Title */}
-        <Text style={styles.title}>{slides[currentIndex].title}</Text>
+          {/* Visual Section */}
+          <View style={styles.centerSection}>
+            <View style={styles.iconBackdrop}>
+              <Image
+                source={slides[currentIndex].icon}
+                style={styles.icon}
+                resizeMode="contain"
+              />
+            </View>
 
-        {/* Description */}
-        <Text style={styles.description}>
-          {slides[currentIndex].description}
-        </Text>
+            {/* Typography */}
+            <Text style={styles.brandSubtitle}>VIDHI GYAN SODH</Text>
+            <Text style={styles.title}>{slides[currentIndex].title}</Text>
+            <Text style={styles.description}>
+              {slides[currentIndex].description}
+            </Text>
+          </View>
 
-        {/* Pagination Dots */}
-        <View style={styles.dotsContainer}>
-          {slides.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.dot,
-                index === currentIndex ? styles.activeDot : styles.inactiveDot,
-              ]}
-            />
-          ))}
-        </View>
+          {/* Bottom Navigation Section */}
+          <View style={styles.footer}>
+            {/* Pagination Dots */}
+            <View style={styles.dotsContainer}>
+              {slides.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.dot,
+                    index === currentIndex ? styles.activeDot : styles.inactiveDot,
+                  ]}
+                />
+              ))}
+            </View>
 
-        {/* Button */}
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.buttonText}>
-            {currentIndex === slides.length - 1 ? 'Get Started' : 'Next'}
-          </Text>
-        </TouchableOpacity>
+            {/* Action Button */}
+            <TouchableOpacity 
+              activeOpacity={0.8} 
+              style={styles.nextButton} 
+              onPress={handleNext}
+            >
+              <Text style={styles.buttonText}>
+                {currentIndex === slides.length - 1 ? 'GET STARTED' : 'CONTINUE'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Skip Link */}
-        <TouchableOpacity onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+        </SafeAreaView>
       </LinearGradient>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  mainContainer: {
     flex: 1,
   },
   gradient: {
     flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+    paddingHorizontal: 35,
+  },
+  skipWrapper: {
+    alignSelf: 'flex-end',
+    marginTop: 20,
+    padding: 10,
+  },
+  skipText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  centerSection: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 30,
   },
-  iconContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 60,
-    padding: 25,
+  iconBackdrop: {
+    width: 160,
+    height: 160,
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    borderRadius: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 40,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.1)',
   },
   icon: {
-    width: 70,
-    height: 70,
-    tintColor: '#FFD700',
+    width: 90,
+    height: 90,
+    tintColor: '#D4AF37', // Premium Gold
+  },
+  brandSubtitle: {
+    fontSize: 12,
+    color: '#D4AF37',
+    letterSpacing: 4,
+    fontWeight: '700',
+    marginBottom: 15,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 32,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 34,
+    marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'Times New Roman' : 'serif',
+    lineHeight: 40,
   },
   description: {
     fontSize: 16,
-    color: '#E0E0E0',
+    color: '#94A3B8',
     textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 24,
+    lineHeight: 26,
+    paddingHorizontal: 10,
+  },
+  footer: {
+    paddingBottom: 40,
   },
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 40,
+    marginBottom: 35,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginHorizontal: 6,
+    height: 4,
+    borderRadius: 2,
+    marginHorizontal: 4,
   },
   activeDot: {
-    backgroundColor: '#FFD700',
+    width: 24,
+    backgroundColor: '#D4AF37',
   },
   inactiveDot: {
-    backgroundColor: '#FFFFFF',
+    width: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   nextButton: {
-    width: '100%',
-    backgroundColor: '#FFD700',
-    paddingVertical: 16,
-    borderRadius: 30,
+    backgroundColor: '#D4AF37',
+    paddingVertical: 20,
+    borderRadius: 16,
     alignItems: 'center',
-    marginBottom: 20,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 8,
   },
   buttonText: {
     color: '#000',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  skipText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    textDecorationLine: 'underline',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 1.5,
   },
 });

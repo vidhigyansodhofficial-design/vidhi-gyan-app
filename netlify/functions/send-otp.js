@@ -1,57 +1,40 @@
-// netlify/functions/send-otp.js
-const nodemailer = require('nodemailer');
+import nodemailer from "nodemailer";
+import { supabase } from "./supabaseClient.js";
 
-// Hardcoded for dev (never in prod!)
-const GMAIL_USER = 'vidhigyansodh.official@gmail.com'; // ← REPLACE WITH YOUR GMAIL
-const GMAIL_APP_PASSWORD = 'cpkw vsec lcqh hrav'; // ← YOUR 16-CHAR APP PASSWORD
-
-// In-memory store (use Redis or DB in prod)
-const otpStore = new Map();
-
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' };
-  }
-
+export async function handler(event) {
   try {
-    const { email } = JSON.parse(event.body);
-
-    if (!email || !email.includes('@')) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid email' }) };
-    }
-
-    // Generate 6-digit OTP
+    const { email, full_name } = JSON.parse(event.body);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
 
-    // Save OTP (in prod: save to DB)
-    otpStore.set(email, { otp, expiresAt });
+    const expires = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Send email
+    await supabase.from("users").upsert({
+      email,
+      full_name,
+      otp,
+      otp_expires_at: expires,
+    });
+
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
-        user: GMAIL_USER,
-        pass: GMAIL_APP_PASSWORD,
+        user: "vidhigyansodh.official@gmail.com",
+        pass: "ngzv gmty yuig fyun",
       },
     });
 
     await transporter.sendMail({
-      from: GMAIL_USER,
+      from: "Vidhi Gyan Sodh <vidhigyansodh.official@gmail.com>",
       to: email,
-      subject: 'Your OTP Code - Vidhi Gyan',
-      text: `Your OTP code is: ${otp}\nIt expires in 10 minutes.`,
+      subject: "Your OTP - Vidhi Gyan Sodh",
+      html: `<h2>Your OTP is <b>${otp}</b></h2><p>Valid for 5 minutes</p>`,
     });
 
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true }),
     };
-  } catch (error) {
-    console.error('OTP Error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to send OTP' }),
-    };
+  } catch (err) {
+    return { statusCode: 500, body: err.toString() };
   }
-};
+}

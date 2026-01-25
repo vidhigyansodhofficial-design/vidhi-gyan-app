@@ -1,197 +1,314 @@
-// app/screens/my-courses.tsx
-
-import FooterNav from '@/components/FooterNav';
-import Header from '@/components/Header';
-import SafeScreen from '@/components/SafeScreen';
-import { Palette } from '@/constants/theme';
-import { Course, courses } from '@/lib/data';
-import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  ActivityIndicator,
+  Alert,
+  TouchableOpacity,
+  Image,
 } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { Course } from '@/lib/type';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 🔹 Tab
-const Tab = ({ title, isActive, onPress }: { title: string; isActive: boolean; onPress: () => void }) => (
-  <TouchableOpacity style={[styles.tab, isActive && styles.activeTab]} onPress={onPress}>
-    <Text style={[styles.tabText, isActive && styles.activeTabText]}>{title}</Text>
-  </TouchableOpacity>
-);
+// Components
+import HomeHeader from '@/components/HomeHeader';
+import FooterNav from '@/components/FooterNav';
 
-// 🔹 Course Card
-const CourseCard = ({ course, progress, lastWatched, onContinue }: any) => (
-  <View style={styles.courseCard}>
-    <View style={styles.courseImageContainer}>
-      <Image source={{ uri: course.image }} style={styles.courseImage} />
-    </View>
-    <View style={styles.courseDetails}>
-      <Text style={styles.courseTitle}>{course.title}</Text>
-      <Text style={styles.courseInstructor}>{course.instructor}</Text>
-      <View style={styles.courseMeta}>
-        <Text style={styles.metaText}>🕒 Last watched {lastWatched}</Text>
-      </View>
-      <View style={styles.progressContainer}>
-        <Text style={styles.progressText}>{progress}% complete</Text>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
-        </View>
-      </View>
-      <TouchableOpacity style={styles.continueButton} onPress={onContinue}>
-        <Text style={styles.continueText}>Continue</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-);
+interface EnrolledCourse extends Course {
+  progress_percent: number;
+}
 
 export default function MyCoursesScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'inProgress' | 'completed' | 'wishlist'>('inProgress');
-  const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
-
-  const courseProgress = {
-    '1': { progress: 65, lastWatched: '2 hours ago' },
-    '2': { progress: 42, lastWatched: '1 day ago' },
-    '3': { progress: 15, lastWatched: '3 days ago' },
-    '4': { progress: 100, lastWatched: '5 days ago' },
-    '5': { progress: 80, lastWatched: 'Yesterday' },
-    '6': { progress: 0, lastWatched: 'Never' },
-  };
+  const [courses, setCourses] = useState<EnrolledCourse[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const enrolled = courses.filter((c) => c.enrolled);
-    setEnrolledCourses(enrolled);
+    fetchEnrolledCourses();
   }, []);
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'inProgress':
-        return enrolledCourses
-          .filter((course) => courseProgress[course.id]?.progress < 100)
-          .map((course) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              progress={courseProgress[course.id]?.progress || 0}
-              lastWatched={courseProgress[course.id]?.lastWatched || 'Never'}
-              onContinue={() => router.push(`/screens/course/${course.id}`)}
-            />
-          ));
-      case 'completed':
-        return enrolledCourses
-          .filter((course) => courseProgress[course.id]?.progress === 100)
-          .map((course) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              progress={100}
-              lastWatched={courseProgress[course.id]?.lastWatched || 'Never'}
-              onContinue={() => router.push(`/screens/course/${course.id}`)}
-            />
-          ));
-      case 'wishlist':
-        return (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Your wishlist is empty.</Text>
-            <Text style={styles.emptySubtext}>Add courses to your wishlist by clicking the heart icon.</Text>
-          </View>
-        );
-      default:
-        return null;
+  /* ================= FETCH ENROLLED COURSES ================= */
+  const fetchEnrolledCourses = async () => {
+    try {
+      const storedUser = await AsyncStorage.getItem('user');
+      if (!storedUser) {
+        router.replace('/screens/auth/login');
+        return;
+      }
+
+      const localUser = JSON.parse(storedUser);
+
+      const { data: dbUser, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', localUser.email)
+        .single();
+
+      if (userError || !dbUser) {
+        Alert.alert('Error', 'User not found');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('user_course_enrollments')
+        .select(`
+          progress_percent,
+          courses (*)
+        `)
+        .eq('user_id', dbUser.id)
+        .eq('enrolled', true)
+        .order('enrolled_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formatted: EnrolledCourse[] =
+        data?.map((item: any) => ({
+          ...item.courses,
+          progress_percent: item.progress_percent || 0,
+        })) || [];
+
+      setCourses(formatted);
+    } catch (err) {
+      console.error('MyCourses error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
+  /* ================= UI ================= */
   return (
-    <>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeScreen> {/* ✅ Wrap everything */}
-        <Header title="My Courses" subtitle="Track your progress" />
 
-        <View style={styles.tabsContainer}>
-          <Tab title="In Progress" isActive={activeTab === 'inProgress'} onPress={() => setActiveTab('inProgress')} />
-          <Tab title="Completed" isActive={activeTab === 'completed'} onPress={() => setActiveTab('completed')} />
-          <Tab title="Wishlist" isActive={activeTab === 'wishlist'} onPress={() => setActiveTab('wishlist')} />
+      {/* HEADER */}
+      <HomeHeader />
+
+      {/* CONTENT */}
+      <View style={styles.mainContent}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.title}>My Courses</Text>
+          <View style={styles.badge}>
+            <Text style={styles.subtitle}>
+              {courses.length} IN PROGRESS
+            </Text>
+          </View>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {renderContent()}
-        </ScrollView>
+        {loading ? (
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color="#D4AF37" />
+          </View>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {courses.length > 0 ? (
+              courses.map(course => (
+                <TouchableOpacity
+                  key={course.id}
+                  activeOpacity={0.9}
+                  style={styles.cardWrapper}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/screens/course/[id]',
+                      params: { id: course.id },
+                    })
+                  }
+                >
+                  {/* IMAGE */}
+                  <Image
+                    source={{
+                      uri:
+                        course.image ||
+                        'https://via.placeholder.com/600x400',
+                    }}
+                    style={styles.courseImage}
+                  />
 
-        <FooterNav />
-      </SafeScreen>
-    </>
+                  <View style={styles.cardDetails}>
+                    <Text style={styles.courseTitle} numberOfLines={2}>
+                      {course.title}
+                    </Text>
+
+                    <Text style={styles.instructorText}>
+                      {course.instructor}
+                    </Text>
+
+                    <View style={styles.priceRow}>
+                      <View style={styles.ratingBox}>
+                        <Text style={styles.ratingText}>
+                          ★ {course.rating || 4.8}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.priceText}>
+                        {course.price ? `₹${course.price}` : 'Free'}
+                      </Text>
+                    </View>
+
+                    {/* PROGRESS */}
+                    <View style={styles.progressContainer}>
+                      <View style={styles.progressTrack}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            { width: `${course.progress_percent}%` },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.progressPercentText}>
+                        {course.progress_percent}% complete
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  No active courses found.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        )}
+      </View>
+
+      <FooterNav />
+    </View>
   );
 }
 
+/* ================= STYLES ================= */
 const styles = StyleSheet.create({
-  tabsContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+  mainContent: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+  },
+  sectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: Palette.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Palette.divider,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 15,
   },
-  tab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Palette.divider,
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1A1A1A',
   },
-  activeTab: {
-    backgroundColor: Palette.yellow,
-    borderColor: Palette.yellow,
-  },
-  tabText: { fontSize: 14, color: Palette.textPrimary },
-  activeTabText: { color: Palette.white },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 70,
-  },
-  courseCard: {
-    flexDirection: 'row',
-    backgroundColor: Palette.white,
+  badge: {
+    backgroundColor: '#FFF4D6',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 16,
+  },
+  subtitle: {
+    fontSize: 10,
+    color: '#B8860B',
+    fontWeight: 'bold',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 120,
+  },
+  cardWrapper: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 20,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  courseImageContainer: { width: 100, height: 80 },
-  courseImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  courseDetails: { flex: 1, padding: 12, justifyContent: 'space-between' },
-  courseTitle: { fontSize: 16, fontWeight: 'bold', color: Palette.textPrimary, marginBottom: 4 },
-  courseInstructor: { fontSize: 14, color: Palette.textSecondary, marginBottom: 8 },
-  courseMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  metaText: { fontSize: 12, color: Palette.textSecondary },
-  progressContainer: { marginBottom: 8 },
-  progressText: { fontSize: 12, color: Palette.textSecondary, marginBottom: 4 },
-  progressBar: { height: 6, backgroundColor: Palette.divider, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: Palette.yellow },
-  continueButton: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  courseImage: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#E1E1E1',
+  },
+  cardDetails: {
+    padding: 16,
+  },
+  courseTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  instructorText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  ratingBox: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: Palette.yellow,
   },
-  continueText: { fontSize: 12, color: Palette.textPrimary },
-  emptyState: {
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#444',
+  },
+  priceText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#2D2F31',
+  },
+  progressContainer: {
+    marginTop: 5,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: '#E9ECEF',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#D4AF37',
+  },
+  progressPercentText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  loaderContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  emptyText: { fontSize: 18, color: Palette.textSecondary, marginBottom: 8 },
-  emptySubtext: { fontSize: 14, color: Palette.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
+  emptyState: {
+    marginTop: 100,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#999',
+    fontSize: 16,
+  },
 });

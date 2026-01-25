@@ -12,6 +12,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="screens/home" options={{ headerShown: false }} />
         <Stack.Screen name="screens/login" options={{ headerShown: false }} />
+        <Stack.Screen name="screens/course/[id]" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
     </ThemeProvider>

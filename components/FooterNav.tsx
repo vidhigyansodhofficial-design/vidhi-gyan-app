@@ -12,7 +12,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
-// 🔹 Custom SVG Icon Component
 const BootstrapIcon = ({ name, color, size = 24 }: { name: string; color: string; size?: number }) => {
   const icons: Record<string, string> = {
     home: 'M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L2 8.207V13.5A1.5 1.5 0 0 0 3.5 15h9a1.5 1.5 0 0 0 1.5-1.5V8.207l.646.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293zM13 7.207V13.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V7.207l5-5z',
@@ -46,8 +45,14 @@ export default function FooterNav() {
     { name: 'Account', path: '/screens/account', icon: 'person' },
   ];
 
-  // ✅ Calculate dynamic bottom padding
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 8);
+
+  const handlePress = (path: string) => {
+    if (pathname !== path) {
+      // Use replace to avoid stacking navigation history on tab switches
+      router.replace(path as any);
+    }
+  };
 
   return (
     <View style={[styles.footer, { paddingBottom: bottomPadding }]}>
@@ -59,7 +64,8 @@ export default function FooterNav() {
           <TouchableOpacity
             key={index}
             style={styles.navItem}
-            onPress={() => router.push(item.path)}
+            activeOpacity={0.7}
+            onPress={() => handlePress(item.path)}
           >
             <BootstrapIcon name={item.icon} color={color} size={24} />
             <Text
@@ -67,12 +73,14 @@ export default function FooterNav() {
                 styles.label,
                 {
                   color,
-                  fontWeight: isActive ? '600' : '400',
+                  fontWeight: isActive ? '700' : '500',
                 },
               ]}
             >
               {item.name}
             </Text>
+            {/* Optional: Add a small indicator dot for active tab */}
+            {isActive && <View style={styles.activeIndicator} />}
           </TouchableOpacity>
         );
       })}
@@ -88,18 +96,32 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.white,
     borderTopWidth: 1,
     borderTopColor: Palette.divider,
-    paddingTop: 8,
+    paddingTop: 12,
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    // Add shadow for a floating effect
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 20,
   },
   navItem: {
     alignItems: 'center',
     flex: 1,
+    height: 45,
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 4,
   },
+  activeIndicator: {
+    marginTop: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Palette.yellow,
+  }
 });
