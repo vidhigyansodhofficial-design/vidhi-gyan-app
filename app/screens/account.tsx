@@ -1,348 +1,294 @@
-// app/screens/account.tsx
-
-import FooterNav from '@/components/FooterNav';
-import Header from '@/components/Header';
-import SafeScreen from '@/components/SafeScreen';
-import { Palette } from '@/constants/theme';
-import { Stack, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  Alert,
+  TouchableOpacity,
+  Image,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { Stack, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
+import Svg, { Path, Circle, Line } from 'react-native-svg';
 
-// 🔹 Bootstrap SVG Icons
+// Components
+import HomeHeader from '@/components/HomeHeader';
+import FooterNav from '@/components/FooterNav';
+
+/* ================= ICONS ================= */
 const EditIcon = () => (
-    <Svg width={20} height={20} viewBox="0 0 16 16" fill="currentColor">
-        <Path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z" />
-        <Path fillRule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5z" />
-    </Svg>
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#B8860B" strokeWidth="2">
+    <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </Svg>
 );
 
-const PaymentIcon = () => (
-    <Svg width={20} height={20} viewBox="0 0 16 16" fill="currentColor">
-        <Path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5H0zm11.5 1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h2a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM0 11v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1z" />
-    </Svg>
+const LangIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
+    <Circle cx="12" cy="12" r="10" />
+    <Line x1="2" y1="12" x2="22" y2="12" />
+    <Path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+  </Svg>
 );
 
-const DownloadIcon = () => (
-    <Svg width={20} height={20} viewBox="0 0 16 16" fill="currentColor">
-        <Path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5" />
-        <Path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z" />
-    </Svg>
-);
-
-const SettingsIcon = () => (
-    <Svg width={20} height={20} viewBox="0 0 16 16" fill="currentColor">
-        <Path d="M7.068.727c.243-.97 1.62-.97 1.864 0l.071.286a.96.96 0 0 0 1.622.434l.205-.211c.695-.719 1.888-.03 1.613.931l-.08.284a.96.96 0 0 0 1.187 1.187l.283-.081c.96-.275 1.65.918.931 1.613l-.211.205a.96.96 0 0 0 .434 1.622l.286.071c.97.243.97 1.62 0 1.864l-.286.071a.96.96 0 0 0-.434 1.622l.211.205c.719.695.03 1.888-.931 1.613l-.284-.08a.96.96 0 0 0-1.187 1.187l.081.283c.275.96-.918 1.65-1.613.931l-.205-.211a.96.96 0 0 0-1.622.434l-.071.286c-.243.97-1.62.97-1.864 0l-.071-.286a.96.96 0 0 0-1.622-.434l-.205.211c-.695.719-1.888.03-1.613-.931l.08-.284a.96.96 0 0 0-1.186-1.187l-.284.081c-.96.275-1.65-.918-.931-1.613l.211-.205a.96.96 0 0 0-.434-1.622l-.286-.071c-.97-.243-.97-1.62 0-1.864l.286-.071a.96.96 0 0 0 .434-1.622l-.211-.205c-.719-.695-.03-1.888.931-1.613l.284.08a.96.96 0 0 0 1.187-1.186l-.081-.284c-.275-.96.918-1.65 1.613-.931l.205.211a.96.96 0 0 0 1.622.434zM12.973 8.5H8.25l-2.834 3.779A4.998 4.998 0 0 0 12.973 8.5m0-1a4.998 4.998 0 0 0-7.557-3.779l2.834 3.78zM5.048 3.967l-.087.065zm-.431.355A4.98 4.98 0 0 0 3.002 8c0 1.455.622 2.765 1.615 3.678L7.375 8zm.344 7.646.087.065z" />
-    </Svg>
-);
-
-const HelpIcon = () => (
-    <Svg width={20} height={20} viewBox="0 0 16 16" fill="currentColor">
-        <Path d="M8.05 9.6c.336 0 .504-.24.554-.627.04-.534.198-.815.847-1.26.673-.475 1.049-1.09 1.049-1.986 0-1.325-.92-2.227-2.262-2.227-1.02 0-1.792.492-2.1 1.29A1.7 1.7 0 0 0 6 5.48c0 .393.203.64.545.64.272 0 .455-.147.564-.51.158-.592.525-.915 1.074-.915.61 0 1.03.446 1.03 1.084 0 .563-.208.885-.822 1.325-.619.433-.926.914-.926 1.64v.111c0 .428.208.745.585.745" />
-        <Path d="m10.273 2.513-.921-.944.715-.698.622.637.89-.011a2.89 2.89 0 0 1 2.924 2.924l-.01.89.636.622a2.89 2.89 0 0 1 0 4.134l-.637.622.011.89a2.89 2.89 0 0 1-2.924 2.924l-.89-.01-.622.636a2.89 2.89 0 0 1-4.134 0l-.637-.637-.89.011a2.89 2.89 0 0 1-2.924-2.924l.01-.89-.636-.622a2.89 2.89 0 0 1 0-4.134l.637-.622-.011-.89a2.89 2.89 0 0 1 2.924-2.924l.89.01.622-.636a2.89 2.89 0 0 1 4.134 0l-.715.698a1.89 1.89 0 0 0-2.704 0l-.92.944-1.32-.016a1.89 1.89 0 0 0-1.911 1.912l.016 1.318-.944.921a1.89 1.89 0 0 0 0 2.704l.944.92-.016 1.32a1.89 1.89 0 0 0 1.912 1.911l1.318-.016.921.944a1.89 1.89 0 0 0 2.704 0l.92-.944 1.32.016a1.89 1.89 0 0 0 1.911-1.912l-.016-1.318.944-.921a1.89 1.89 0 0 0 0-2.704l-.944-.92.016-1.32a1.89 1.89 0 0 0-1.912-1.911z" />
-        <Path d="M7.001 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0" />
-    </Svg>
+const ThemeIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
+    <Path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </Svg>
 );
 
 const LogoutIcon = () => (
-    <Svg width={20} height={20} viewBox="0 0 16 16" fill="currentColor">
-        <Path fillRule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0z" />
-        <Path fillRule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z" />
-    </Svg>
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#FF4D4D" strokeWidth="2">
+    <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <Line x1="16" y1="17" x2="21" y2="12" />
+    <Line x1="16" y1="7" x2="21" y2="12" />
+    <Line x1="21" y1="12" x2="9" y2="12" />
+  </Svg>
 );
 
-// 🔹 Account Card
-const AccountCard = ({
-    title,
-    subtitle,
-    icon,
-    onPress,
-    isLogout = false,
-}: {
-    title: string;
-    subtitle: string;
-    icon: React.ReactNode;
-    onPress: () => void;
-    isLogout?: boolean;
-}) => (
-    <TouchableOpacity
-        style={[styles.card, isLogout && styles.logoutCard]}
-        onPress={onPress}
-    >
-        <View style={styles.iconContainer}>{icon}</View>
-        <View style={styles.textContainer}>
-            <Text style={[styles.cardTitle, isLogout && styles.logoutTitle]}>{title}</Text>
-            <Text style={[styles.cardSubtitle, isLogout && styles.logoutSubtitle]}>{subtitle}</Text>
-        </View>
-        <View style={styles.arrowContainer}>
-            <Text style={[styles.arrow, isLogout && styles.logoutArrow]}>›</Text>
-        </View>
-    </TouchableOpacity>
-);
-
+/* ================= SCREEN ================= */
 export default function AccountScreen() {
-    const router = useRouter();
+  const router = useRouter();
+  const [user, setUser] = useState({
+    name: 'User',
+    email: '',
+    courses: 0,
+    completed: 0,
+    learningTime: '0h',
+  });
 
-    const user = {
-        name: 'Arjun Kumar',
-        email: 'arjun.kumar@email.com',
-        courses: 12,
-        completed: 8,
-        learningTime: '45h',
-    };
+  useEffect(() => {
+    loadAccountData();
+  }, []);
 
-    const handleLogout = () => {
-        Alert.alert(
-            'Logout',
-            'Are you sure you want to logout?',
-            [
-                {
-                    text: 'Cancel',
-                    style: 'cancel',
-                },
-                {
-                    text: 'OK',
-                    onPress: () => router.push('/screens/login'),
-                },
-            ],
-            { cancelable: false }
-        );
-    };
+  const loadAccountData = async () => {
+    const storedUser = await AsyncStorage.getItem('user');
+    if (!storedUser) {
+      router.replace('/screens/auth/login');
+      return;
+    }
 
-    return (
-        <>
-            <Stack.Screen options={{ headerShown: false }} />
+    const localUser = JSON.parse(storedUser);
 
-            <SafeScreen>
-                <Header title="Account" subtitle="Manage your profile and settings" />
+    const { data: dbUser } = await supabase
+      .from('users')
+      .select('id, full_name, email')
+      .eq('email', localUser.email)
+      .single();
 
-                <ScrollView
-                    style={styles.container}
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {/* User Profile */}
-                    <View style={styles.profileContainer}>
-                        <Image
-                            source={{
-                                uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.1.0&ixid=M3wzNzg4Nzd8MHwxfHNlYXJjaHwxfHxjb25zb2xlJTIwdXNlcnxlbnwwfHx8fDE3NjAwMzY5ODF8MA&auto=format&fit=crop&w=1080',
-                            }}
-                            style={styles.avatar}
-                        />
-                        <View style={styles.userInfo}>
-                            <Text style={styles.userName}>{user.name}</Text>
-                            <Text style={styles.userEmail}>{user.email}</Text>
-                        </View>
-                        <TouchableOpacity style={styles.editProfileButton}>
-                            <EditIcon />
-                        </TouchableOpacity>
-                    </View>
+    if (!dbUser) return;
 
-                    {/* Stats */}
-                    <View style={styles.statsContainer}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statNumber}>{user.courses}</Text>
-                            <Text style={styles.statLabel}>Courses</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statNumber}>{user.completed}</Text>
-                            <Text style={styles.statLabel}>Completed</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={[styles.statNumber, styles.statHighlight]}>{user.learningTime}</Text>
-                            <Text style={styles.statLabel}>Learning Time</Text>
-                        </View>
-                    </View>
+    const { data: enrollments } = await supabase
+      .from('user_course_enrollments')
+      .select('completed')
+      .eq('user_id', dbUser.id)
+      .eq('enrolled', true);
 
-                    {/* Action Cards */}
-                    <View style={styles.actionCards}>
-                        <AccountCard
-                            title="Edit Profile"
-                            subtitle="Update your personal information"
-                            icon={<EditIcon />}
-                            onPress={() => Alert.alert('Edit Profile', 'Feature coming soon')}
-                        />
-                        <AccountCard
-                            title="Payment History"
-                            subtitle="View your transaction history"
-                            icon={<PaymentIcon />}
-                            onPress={() => Alert.alert('Payment History', 'Feature coming soon')}
-                        />
-                        <AccountCard
-                            title="Downloads"
-                            subtitle="Access your downloaded materials"
-                            icon={<DownloadIcon />}
-                            onPress={() => Alert.alert('Downloads', 'Feature coming soon')}
-                        />
-                        <AccountCard
-                            title="Settings"
-                            subtitle="App preferences and notifications"
-                            icon={<SettingsIcon />}
-                            onPress={() => Alert.alert('Settings', 'Feature coming soon')}
-                        />
-                        <AccountCard
-                            title="Help Center"
-                            subtitle="FAQs and customer support"
-                            icon={<HelpIcon />}
-                            onPress={() => Alert.alert('Help Center', 'Feature coming soon')}
-                        />
-                        <AccountCard
-                            title="Logout"
-                            subtitle="Sign out of your account"
-                            icon={<LogoutIcon />}
-                            onPress={handleLogout}
-                            isLogout
-                        />
-                    </View>
+    const total = enrollments?.length || 0;
+    const completed = enrollments?.filter(e => e.completed).length || 0;
 
-                    {/* Version */}
-                    <View style={styles.versionContainer}>
-                        <Text style={styles.versionText}>Vidhi Gyan Sodh</Text>
-                        <Text style={styles.versionText}>Version 1.0</Text>
-                    </View>
-                </ScrollView>
+    setUser({
+      name: dbUser.full_name || 'User',
+      email: dbUser.email,
+      courses: total,
+      completed,
+      learningTime: `${total * 4}h`,
+    });
+  };
 
-                {/* Fixed Footer */}
-                <FooterNav />
-            </SafeScreen>
-        </>
-    );
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.clear();
+          router.replace('/screens/auth/login');
+        },
+      },
+    ]);
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* STATUS BAR FIX */}
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* HEADER */}
+      <View style={styles.headerWrapper}>
+        <HomeHeader />
+      </View>
+
+      {/* CONTENT */}
+      <View style={styles.mainContent}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 }}
+        >
+          {/* PROFILE */}
+          <View style={styles.profileSection}>
+            <Image
+              source={{
+                uri: `https://ui-avatars.com/api/?name=${user.name}&background=D4AF37&color=fff`,
+              }}
+              style={styles.avatar}
+            />
+            <View style={{ marginLeft: 16 }}>
+              <Text style={styles.userName}>{user.name}</Text>
+              <Text style={styles.userEmail}>{user.email}</Text>
+            </View>
+          </View>
+
+          {/* STATS */}
+          <View style={styles.statsGrid}>
+            <Stat label="Courses" value={user.courses} />
+            <Stat label="Completed" value={user.completed} />
+            <Stat label="XP" value={user.learningTime} highlight />
+          </View>
+
+          {/* SETTINGS */}
+          <Text style={styles.groupTitle}>Account</Text>
+          <Card>
+            <Menu icon={<EditIcon />} title="Edit Profile" />
+            <Menu icon={<LangIcon />} title="Language" />
+            <Menu icon={<ThemeIcon />} title="Theme" />
+          </Card>
+
+          <Text style={styles.groupTitle}>Support</Text>
+          <Card>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <LogoutIcon />
+              <Text style={styles.logoutText}>Sign Out</Text>
+            </TouchableOpacity>
+          </Card>
+
+          <Text style={styles.version}>Vidhi Gyan Sodh v1.0.4</Text>
+        </ScrollView>
+      </View>
+
+      {/* FOOTER FIXED */}
+      <View style={styles.footerWrapper}>
+        <FooterNav />
+      </View>
+    </View>
+  );
 }
 
+/* ================= SMALL COMPONENTS ================= */
+const Stat = ({ label, value, highlight = false }: any) => (
+  <View style={styles.statBox}>
+    <Text style={[styles.statValue, highlight && { color: '#B8860B' }]}>
+      {value}
+    </Text>
+    <Text style={styles.statLabel}>{label}</Text>
+  </View>
+);
+
+const Card = ({ children }: any) => (
+  <View style={styles.card}>{children}</View>
+);
+
+const Menu = ({ icon, title }: any) => (
+  <View style={styles.menuItem}>
+    <View style={styles.menuLeft}>
+      <View style={styles.iconWrap}>{icon}</View>
+      <Text style={styles.menuTitle}>{title}</Text>
+    </View>
+    <Text style={styles.menuArrow}>›</Text>
+  </View>
+);
+
+/* ================= STYLES ================= */
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: Palette.white,
-    },
-    scrollContent: {
-        paddingBottom: 100,
-    },
-    profileContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: Palette.white,
-        borderBottomWidth: 1,
-        borderBottomColor: Palette.divider,
-    },
-    avatar: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        marginRight: 12,
-    },
-    userInfo: {
-        flex: 1,
-    },
-    userName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: Palette.textPrimary,
-    },
-    userEmail: {
-        fontSize: 14,
-        color: Palette.textSecondary,
-    },
-    editProfileButton: {
-        padding: 8,
-    },
-    statsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        padding: 16,
-        backgroundColor: Palette.white,
-        borderBottomWidth: 1,
-        borderBottomColor: Palette.divider,
-    },
-    statItem: {
-        alignItems: 'center',
-    },
-    statNumber: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: Palette.textPrimary,
-    },
-    statHighlight: {
-        color: Palette.yellow,
-    },
-    statLabel: {
-        fontSize: 14,
-        color: Palette.textSecondary,
-    },
-    actionCards: {
-        paddingHorizontal: 16,
-        paddingTop: 12,
-    },
-    card: {
-        backgroundColor: Palette.white,
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    iconContainer: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: Palette.divider,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    textContainer: {
-        flex: 1,
-    },
-    cardTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: Palette.textPrimary,
-    },
-    cardSubtitle: {
-        fontSize: 14,
-        color: Palette.textSecondary,
-        marginTop: 4,
-    },
-    arrowContainer: {
-        paddingLeft: 8,
-    },
-    arrow: {
-        fontSize: 18,
-        color: Palette.textSecondary,
-    },
-    logoutCard: {
-        borderColor: Palette.yellow,
-        borderWidth: 1,
-    },
-    logoutTitle: {
-        color: Palette.yellow,
-    },
-    logoutSubtitle: {
-        color: Palette.yellow,
-    },
-    logoutArrow: {
-        color: Palette.yellow,
-    },
-    versionContainer: {
-        padding: 20,
-        backgroundColor: Palette.white,
-        alignItems: 'center',
-    },
-    versionText: {
-        fontSize: 12,
-        color: Palette.textSecondary,
-    },
+  container: { flex: 1, backgroundColor: '#F8F9FA', paddingBottom: 70 },
+
+  headerWrapper: { height: 180 },
+
+  mainContent: {
+    flex: 1,
+    marginTop: -30,
+    borderTopLeftRadius: 35,
+    borderTopRightRadius: 35,
+    backgroundColor: '#F8F9FA',
+  },
+
+  profileSection: { flexDirection: 'row', padding: 24 },
+  avatar: { width: 85, height: 85, borderRadius: 42.5, borderWidth: 3, borderColor: '#FFF' },
+  userName: { fontSize: 22, fontWeight: '800' },
+  userEmail: { fontSize: 14, color: '#666' },
+
+  statsGrid: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF',
+    marginHorizontal: 20,
+    borderRadius: 25,
+    paddingVertical: 22,
+    elevation: 4,
+  },
+  statBox: { flex: 1, alignItems: 'center' },
+  statValue: { fontSize: 22, fontWeight: '800' },
+  statLabel: { fontSize: 12, color: '#999', marginTop: 4 },
+
+  groupTitle: {
+    marginTop: 35,
+    marginLeft: 28,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#BBB',
+    letterSpacing: 1.2,
+  },
+
+  card: {
+    backgroundColor: '#FFF',
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 25,
+    paddingHorizontal: 18,
+  },
+
+  menuItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  menuLeft: { flexDirection: 'row', alignItems: 'center' },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#FBFBFB',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  menuTitle: { fontSize: 16, fontWeight: '700' },
+  menuArrow: { fontSize: 24, color: '#EEE' },
+
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20 },
+  logoutText: { marginLeft: 14, fontSize: 17, fontWeight: '800', color: '#FF4D4D' },
+
+  footerWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 70,
+    backgroundColor: '#FFF',
+    borderTopWidth: 1,
+    borderTopColor: '#EEE',
+  },
+
+  version: {
+    textAlign: 'center',
+    color: '#DDD',
+    fontSize: 12,
+    marginVertical: 40,
+  },
 });
