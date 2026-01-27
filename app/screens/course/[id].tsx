@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -8,15 +8,17 @@ import {
   TouchableOpacity,
   StatusBar,
   Alert,
+  Dimensions,
   Platform,
-  SafeAreaView,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { Course, CourseSyllabus } from '@/lib/type';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as NavigationBar from 'expo-navigation-bar';
+
+const { width } = Dimensions.get('window');
 
 type TabType = 'Overview' | 'Syllabus' | 'Reviews';
 
@@ -25,270 +27,284 @@ export default function CourseDetailScreen() {
   const params = useLocalSearchParams();
   const courseId = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  const [course, setCourse] = useState<Course | null>(null);
-  const [syllabus, setSyllabus] = useState<CourseSyllabus[]>([]);
+  const [course, setCourse] = useState<any>(null);
+  const [syllabus, setSyllabus] = useState<any[]>([]);
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
-  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
-
-  const [loading, setLoading] = useState(true);
+  const [activeSyllabusId, setActiveSyllabusId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
-  const [enrolling, setEnrolling] = useState(false);
+  const [progressMap, setProgressMap] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
 
+  /* ---------------- IMMERSIVE MODE LOGIC ---------------- */
+  useFocusEffect(
+    useCallback(() => {
+      const hideSystemBars = async () => {
+        try {
+          if (Platform.OS === 'android') {
+            await NavigationBar.setVisibilityAsync("hidden");
+            await NavigationBar.setBehaviorAsync("sticky-immersive");
+          }
+          StatusBar.setHidden(true, 'fade');
+        } catch (error) {
+          console.warn("System bar error:", error);
+        }
+      };
+      hideSystemBars();
+      return () => {
+        const showSystemBars = async () => {
+          try {
+            if (Platform.OS === 'android') {
+              await NavigationBar.setVisibilityAsync("visible");
+            }
+            StatusBar.setHidden(false, 'fade');
+          } catch (error) {
+            console.warn("System bar restore error:", error);
+          }
+        };
+        showSystemBars();
+      };
+    }, [])
+  );
+
+  /* ---------------- DYNAMIC FONT SCALING LOGIC ---------------- */
+  const titleConfig = useMemo(() => {
+    const rawTitle = course?.title ? course.title.toUpperCase() : "COURSE PLAYER";
+    let fontSize = 11; 
+    let letterSpacing = 2;
+    if (rawTitle.length > 30) {
+      fontSize = 9;
+      letterSpacing = 1.2;
+    } else if (rawTitle.length > 20) {
+      fontSize = 10;
+      letterSpacing = 1.5;
+    }
+    return { title: rawTitle, fontSize, letterSpacing };
+  }, [course]);
+
+  // Calculate local progress percentage for immediate UI feedback
+  const progressPercent = useMemo(() => {
+    if (!syllabus.length) return 0;
+    const completedCount = Object.values(progressMap).filter(v => v === true).length;
+    return Math.round((completedCount / syllabus.length) * 100);
+  }, [progressMap, syllabus]);
+
+  const totalDuration = useMemo(() => {
+    return syllabus.reduce((acc, curr) => acc + (parseInt(curr.duration) || 0), 0) + " mins";
+  }, [syllabus]);
+
   useEffect(() => {
-    if (courseId) loadData();
+    if (courseId) loadAll();
   }, [courseId]);
 
-  const loadData = async () => {
+  const loadAll = async () => {
     setLoading(true);
     try {
-      const storedUser = await AsyncStorage.getItem('user');
-      if (!storedUser) {
+      const stored = await AsyncStorage.getItem('user');
+      if (!stored) {
         router.replace('/screens/auth/login');
         return;
       }
-      const localUser = JSON.parse(storedUser);
+      const localUser = JSON.parse(stored);
+      const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
+      if (!dbUser) return;
+      setUserId(dbUser.id);
 
-      const { data: dbUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', localUser.email)
-        .single();
-
-      if (dbUser) setUserId(dbUser.id);
-
-      const { data: courseData, error: courseError } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('id', courseId)
-        .single();
-
-      if (courseError) throw courseError;
+      const { data: courseData } = await supabase.from('courses').select('*').eq('id', courseId).single();
       setCourse(courseData);
 
-      const { data: syllabusData } = await supabase
-        .from('course_syllabus')
-        .select('*')
-        .eq('course_id', courseId)
-        .order('order_index', { ascending: true });
-
+      const { data: syllabusData } = await supabase.from('course_syllabus').select('*').eq('course_id', courseId).order('order_index');
       setSyllabus(syllabusData || []);
 
       if (syllabusData?.length) {
         setActiveVideo(syllabusData[0].video_url);
-        setActiveChapterId(syllabusData[0].id);
+        setActiveSyllabusId(syllabusData[0].id);
       }
 
-      if (dbUser) {
-        const { data: enrollment } = await supabase
-          .from('user_course_enrollments')
-          .select('enrolled')
-          .eq('user_id', dbUser.id)
-          .eq('course_id', courseId)
-          .maybeSingle();
-        setIsEnrolled(enrollment?.enrolled === true);
-      }
-    } catch (err) {
-      console.error('Load error:', err);
-      Alert.alert('Error', 'Could not fetch course details');
+      const { data: enrollment } = await supabase.from('user_course_enrollments').select('*').eq('user_id', dbUser.id).eq('course_id', courseId).maybeSingle();
+      setIsEnrolled(!!enrollment);
+
+      const { data: progressRows } = await supabase.from('user_syllabus_progress').select('syllabus_id, completed').eq('user_id', dbUser.id).eq('course_id', courseId);
+      const map: Record<string, boolean> = {};
+      progressRows?.forEach(p => (map[p.syllabus_id] = p.completed));
+      setProgressMap(map);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEnrollment = async () => {
-    if (!userId || !course) return;
-    setEnrolling(true);
-    try {
-      const { error } = await supabase.from('user_course_enrollments').upsert({
-        user_id: userId,
-        course_id: course.id,
-        enrolled: true,
-        progress_percent: 0,
-      }, { onConflict: 'user_id,course_id' });
+  /* ---------------- MODIFIED MARK COMPLETED ---------------- */
+  // This function now updates the lesson progress AND the overall enrollment percentage
+  const markCompleted = async (sId: string) => {
+    if (!userId || !courseId) return;
 
-      if (error) throw error;
-      setIsEnrolled(true);
-      Alert.alert('Congratulations!', 'Access granted to all lectures.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    } finally {
-      setEnrolling(false);
+    // 1. Update local state for immediate UI feedback
+    const updatedMap = { ...progressMap, [sId]: true };
+    setProgressMap(updatedMap);
+
+    // 2. Calculate new overall percentage
+    const completedCount = Object.values(updatedMap).filter(v => v === true).length;
+    const newPercent = Math.round((completedCount / syllabus.length) * 100);
+
+    try {
+      // 3. Update lesson progress
+      await supabase.from('user_syllabus_progress').upsert({
+        user_id: userId,
+        course_id: courseId,
+        syllabus_id: sId,
+        completed: true,
+        completed_at: new Date().toISOString(),
+        progress_percent: 100 // Mark specific lesson as 100%
+      }, { onConflict: 'user_id, syllabus_id' });
+
+      // 4. Update overall course enrollment progress (This shows on Home Card)
+      await supabase
+        .from('user_course_enrollments')
+        .update({ 
+            progress_percent: newPercent,
+            completed: newPercent >= 100 
+        })
+        .eq('user_id', userId)
+        .eq('course_id', courseId);
+
+    } catch (error) {
+      console.error("Error updating progress:", error);
     }
   };
 
   if (loading || !course) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#D4AF37" />
-      </View>
+      <View style={styles.loader}><ActivityIndicator size="large" color="#D4AF37" /></View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Set status bar to light so it's visible on dark header */}
-      <StatusBar barStyle="light-content" backgroundColor="#1E293B" />
-
-      {/* 1. CLEAN TOP HEADER */}
-      <View style={styles.headerContainer}>
-        <SafeAreaView>
-          <View style={styles.headerContent}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerIconButton}>
-              <MaterialCommunityIcons name="chevron-left" size={28} color="#FFF" />
-            </TouchableOpacity>
-            
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {course.title}
-            </Text>
-            
-            <TouchableOpacity style={styles.headerIconButton}>
-              <MaterialCommunityIcons name="share-variant" size={22} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+      <View style={styles.premiumTopBar}>
+        <View style={styles.headerContent}>
+          <Text 
+            style={[styles.premiumTitle, { fontSize: titleConfig.fontSize, letterSpacing: titleConfig.letterSpacing }]} 
+            numberOfLines={1}
+            adjustsFontSizeToFit={true}
+          >
+            {titleConfig.title}
+          </Text>
+        </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 2. VIDEO SECTION */}
-        <View style={styles.videoContainer}>
-          {activeVideo && (isEnrolled || syllabus.find(s => s.id === activeChapterId)?.preview) ? (
-            <WebView 
-              source={{ uri: activeVideo }} 
-              allowsFullscreenVideo 
-              style={styles.webview}
-              scrollEnabled={false}
-            />
-          ) : (
-            <View style={styles.videoFallback}>
-              <MaterialCommunityIcons name="play-circle" size={60} color="#D4AF37" />
-              <Text style={styles.lockTextText}>Enroll to unlock premium content</Text>
-            </View>
-          )}
-        </View>
-
-        {/* 3. PREMIUM CTA SECTION */}
-        <View style={styles.ctaWrapper}>
-          <View style={styles.ctaContainer}>
-            {!isEnrolled ? (
-              <View>
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceText}>{course.price ? `₹${course.price}` : 'Free'}</Text>
-                  {course.price && <Text style={styles.originalPrice}>₹{Number(course.price) * 1.5}</Text>}
-                </View>
-                <TouchableOpacity
-                  disabled={enrolling}
-                  onPress={handleEnrollment}
-                  style={styles.premiumEnrollBtn}
-                >
-                  {enrolling ? (
-                    <ActivityIndicator color="#000" />
-                  ) : (
-                    <Text style={styles.premiumEnrollBtnText}>Enroll Now</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.enrolledInfo}>
-                <View style={styles.statusLabel}>
-                  <MaterialCommunityIcons name="check-decagram" size={20} color="#D4AF37" />
-                  <Text style={styles.statusLabelText}>You are enrolled in this course</Text>
-                </View>
-                <TouchableOpacity 
-                  style={styles.continueBtn}
-                  onPress={() => setActiveTab('Syllabus')}
-                >
-                  <MaterialCommunityIcons name="play" size={22} color="#FFF" />
-                  <Text style={styles.continueBtnText}>Continue Learning</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+      <StatusBar hidden />
+      
+      <View style={styles.videoSection}>
+        {activeVideo && (isEnrolled || syllabus.find(s => s.id === activeSyllabusId)?.preview) ? (
+          <WebView 
+            source={{ uri: activeVideo }} 
+            style={{ flex: 1 }} 
+            allowsFullscreenVideo 
+            javaScriptEnabled={true}
+          />
+        ) : (
+          <View style={styles.videoLockOverlay}>
+            <MaterialCommunityIcons name="lock-outline" size={40} color="#D4AF37" />
+            <Text style={styles.lockText}>ENROLL TO ACCESS MODULE</Text>
           </View>
-        </View>
+        )}
+        <TouchableOpacity style={styles.videoBackButton} onPress={() => router.back()}>
+          <MaterialCommunityIcons name="chevron-left" size={28} color="#FFF" />
+        </TouchableOpacity>
+      </View>
 
-        {/* 4. COURSE TITLE & META */}
-        <View style={styles.courseDetails}>
-          <Text style={styles.mainTitle}>{course.title}</Text>
-          <View style={styles.ratingRow}>
-            <MaterialCommunityIcons name="star" size={16} color="#D4AF37" />
-            <Text style={styles.ratingValue}>{course.rating}</Text>
-            <Text style={styles.reviewCount}>({course.reviews})</Text>
-            <Text style={styles.metaDot}>•</Text>
-            <Text style={styles.instructorName}>By {course.instructor}</Text>
-          </View>
+      <View style={styles.headerInfo}>
+        <Text style={styles.courseTitle}>{course.title}</Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaText}>{course.instructor}</Text>
+          <Text style={styles.metaDivider}>•</Text>
+          <Text style={styles.metaText}>{course.lectures} Lectures</Text>
+          <Text style={styles.metaDivider}>•</Text>
+          <Text style={styles.metaText}>{totalDuration}</Text>
         </View>
+      </View>
 
-        {/* 5. TABS */}
-        <View style={styles.tabContainer}>
+      <View style={styles.tabArea}>
+        <View style={styles.tabBar}>
           {(['Overview', 'Syllabus', 'Reviews'] as TabType[]).map((tab) => (
             <TouchableOpacity 
               key={tab} 
               onPress={() => setActiveTab(tab)}
-              style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
+              style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
             >
               <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
             </TouchableOpacity>
           ))}
         </View>
+        
+        {isEnrolled && (
+          <View style={styles.progressContainer}>
+             <View style={styles.progressTextRow}>
+                <Text style={styles.progressLabel}>MODULE PROGRESS</Text>
+                <Text style={styles.progressPercentText}>{progressPercent}%</Text>
+             </View>
+             <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+             </View>
+          </View>
+        )}
+      </View>
 
-        {/* 6. TAB CONTENT */}
-        <View style={styles.tabBody}>
-          {activeTab === 'Overview' && (
-            <View>
-              <Text style={styles.sectionTitle}>About this course</Text>
-              <Text style={styles.descText}>{course.description || "Comprehensive masterclass on this subject."}</Text>
-              
-              <Text style={styles.sectionTitle}>What you'll learn</Text>
-              {course.topics && Array.isArray(course.topics) && course.topics.map((topic, i) => (
-                <View key={i} style={styles.topicRow}>
-                  <MaterialCommunityIcons name="check-circle" size={18} color="#D4AF37" />
-                  <Text style={styles.topicText}>{topic}</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {activeTab === 'Overview' && (
+          <View style={styles.contentPadding}>
+            <Text style={styles.sectionTitle}>Course Overview</Text>
+            <Text style={styles.bodyText}>{course.description}</Text>
+          </View>
+        )}
+
+        {activeTab === 'Syllabus' && (
+          <View style={styles.contentPadding}>
+            {syllabus.map((item, index) => (
+              <TouchableOpacity 
+                key={item.id} 
+                style={[styles.lessonItem, activeSyllabusId === item.id && styles.lessonActive]}
+                onPress={() => {
+                  if (isEnrolled || item.preview) {
+                    setActiveSyllabusId(item.id);
+                    setActiveVideo(item.video_url);
+                  }
+                }}
+              >
+                <View style={styles.lessonMain}>
+                   <View style={styles.numberBox}>
+                     <Text style={styles.numberText}>{index + 1}</Text>
+                   </View>
+                   <View style={styles.lessonTextContent}>
+                     <Text style={styles.lessonTitle} numberOfLines={1}>{item.title}</Text>
+                     <Text style={styles.lessonSub}>{item.duration || '0'} mins</Text>
+                   </View>
                 </View>
-              ))}
-            </View>
-          )}
 
-          {activeTab === 'Syllabus' && (
-            <View>
-              <Text style={styles.sectionTitle}>{syllabus.length} Lectures • {course.total_duration}</Text>
-              {syllabus.map((item, index) => (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => {
-                    if (isEnrolled || item.preview) {
-                      setActiveVideo(item.video_url);
-                      setActiveChapterId(item.id);
-                    } else {
-                      Alert.alert('Lecture Locked', 'Enroll now to access full syllabus.');
-                    }
-                  }}
-                  style={[
-                    styles.lessonRow,
-                    activeChapterId === item.id && styles.activeLessonRow
-                  ]}
-                >
-                  <View style={styles.lessonLead}>
-                    <View style={styles.lessonIndex}>
-                      <Text style={styles.lessonIndexText}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.lessonInfo}>
-                      <Text style={[styles.lessonTitle, activeChapterId === item.id && { color: '#D4AF37' }]}>
-                        {item.title}
-                      </Text>
-                      <Text style={styles.lessonMeta}>{item.duration || '05:00'}</Text>
-                    </View>
-                  </View>
-                  <MaterialCommunityIcons 
-                    name={isEnrolled || item.preview ? "play-circle" : "lock"} 
-                    size={22} 
-                    color={activeChapterId === item.id ? "#D4AF37" : "#CBD5E1"} 
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
+                <View style={styles.actionArea}>
+                  {isEnrolled && !progressMap[item.id] ? (
+                    <TouchableOpacity style={styles.doneBtn} onPress={() => markCompleted(item.id)}>
+                      <Text style={styles.doneBtnText}>DONE</Text>
+                    </TouchableOpacity>
+                  ) : progressMap[item.id] ? (
+                    <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
+                  ) : (
+                    <MaterialCommunityIcons name="lock-outline" size={18} color="#CBD5E1" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {activeTab === 'Reviews' && (
+          <View style={styles.contentPadding}>
+            <Text style={styles.bodyText}>Verified feedback from the legal community.</Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -297,90 +313,42 @@ export default function CourseDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
-  // Updated Header Style
-  headerContainer: { backgroundColor: '#1E293B', paddingBottom: 10 },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
-    height: 50,
-  },
-  headerIconButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
-
-  // Video Section
-  videoContainer: { height: 220, backgroundColor: '#000', borderBottomWidth: 3, borderColor: '#D4AF37' },
-  webview: { flex: 1 },
-  videoFallback: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  lockTextText: { color: '#94A3B8', marginTop: 10, fontSize: 13 },
-
-  // CTA Section
-  ctaWrapper: { padding: 15, backgroundColor: '#FFF' },
-  ctaContainer: { 
-    padding: 15, 
-    borderRadius: 12, 
-    backgroundColor: '#FFF', 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3
-  },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 12 },
-  priceText: { fontSize: 28, fontWeight: '900', color: '#1E293B' },
-  originalPrice: { fontSize: 15, color: '#94A3B8', textDecorationLine: 'line-through', marginLeft: 8 },
-  premiumEnrollBtn: { backgroundColor: '#D4AF37', paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
-  premiumEnrollBtnText: { color: '#1E293B', fontSize: 17, fontWeight: '800' },
-
-  // Enrolled State
-  enrolledInfo: { alignItems: 'center' },
-  statusLabel: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  statusLabelText: { marginLeft: 8, fontWeight: '700', color: '#1E293B', fontSize: 15 },
-  continueBtn: { 
-    backgroundColor: '#1E293B', 
-    flexDirection: 'row', 
-    width: '100%', 
-    paddingVertical: 14, 
-    borderRadius: 10, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  continueBtnText: { color: '#FFF', fontWeight: '800', marginLeft: 8, fontSize: 16 },
-
-  // Course Details
-  courseDetails: { paddingHorizontal: 20, paddingBottom: 15 },
-  mainTitle: { fontSize: 22, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center' },
-  ratingValue: { marginLeft: 4, fontWeight: '800', color: '#D4AF37', fontSize: 15 },
-  reviewCount: { marginLeft: 2, color: '#64748B', fontSize: 13 },
-  metaDot: { marginHorizontal: 8, color: '#CBD5E1' },
-  instructorName: { color: '#64748B', fontWeight: '600' },
-
-  // Tab Bar
-  tabContainer: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#F1F5F9' },
-  tabItem: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  activeTabItem: { borderBottomWidth: 3, borderColor: '#D4AF37' },
-  tabText: { fontWeight: '700', color: '#94A3B8', fontSize: 14 },
-  activeTabText: { color: '#D4AF37' },
-
-  // Tab Body
-  tabBody: { padding: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 12 },
-  descText: { fontSize: 15, color: '#475569', lineHeight: 24, marginBottom: 20 },
-  topicRow: { flexDirection: 'row', marginBottom: 10, alignItems: 'flex-start' },
-  topicText: { marginLeft: 10, color: '#334155', fontSize: 14, fontWeight: '500', flex: 1 },
-
-  // Syllabus Rows
-  lessonRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderColor: '#F8FAFC' },
-  activeLessonRow: { backgroundColor: '#FFFDF5' },
-  lessonLead: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  lessonIndex: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  lessonIndexText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
-  lessonInfo: { marginLeft: 12, flex: 1 },
-  lessonTitle: { fontSize: 14, fontWeight: '600', color: '#334155' },
-  lessonMeta: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  premiumTopBar: { backgroundColor: '#D4AF37', paddingTop: Platform.OS === 'ios' ? 55 : 18, paddingBottom: 15, elevation: 4 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  premiumTitle: { fontWeight: '900', color: '#FFF', textAlign: 'center' },
+  videoSection: { height: 230, backgroundColor: '#000', position: 'relative' },
+  videoLockOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A' },
+  lockText: { color: '#D4AF37', fontSize: 12, fontWeight: '800', marginTop: 10, letterSpacing: 1.2 },
+  videoBackButton: { position: 'absolute', top: 15, left: 15, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  headerInfo: { padding: 22 },
+  courseTitle: { fontSize: 23, fontWeight: '900', color: '#1E293B', marginBottom: 10, lineHeight: 30 },
+  metaRow: { flexDirection: 'row', alignItems: 'center' },
+  metaText: { color: '#64748B', fontSize: 13, fontWeight: '600' },
+  metaDivider: { marginHorizontal: 8, color: '#CBD5E1' },
+  tabArea: { borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  tabBar: { flexDirection: 'row', paddingHorizontal: 20 },
+  tabButton: { paddingVertical: 18, marginRight: 25, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  activeTabButton: { borderBottomColor: '#D4AF37' },
+  tabText: { fontSize: 14, fontWeight: '700', color: '#94A3B8' },
+  activeTabText: { color: '#1E293B' },
+  progressContainer: { paddingHorizontal: 22, paddingBottom: 18, paddingTop: 8 },
+  progressTextRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  progressLabel: { fontSize: 11, fontWeight: '900', color: '#64748B', letterSpacing: 1 },
+  progressPercentText: { fontSize: 13, fontWeight: '900', color: '#D4AF37' },
+  progressBarBg: { height: 7, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#D4AF37' },
+  contentPadding: { padding: 22 },
+  sectionTitle: { fontSize: 19, fontWeight: '800', color: '#1E293B', marginBottom: 14 },
+  bodyText: { fontSize: 15, color: '#475569', lineHeight: 26 },
+  lessonItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 14, marginBottom: 12, borderBottomWidth: 1.5, borderColor: '#F1F5F9', backgroundColor: '#FFF' },
+  lessonActive: { backgroundColor: '#FFFDF5', borderColor: '#D4AF37' },
+  lessonMain: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  numberBox: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  numberText: { fontSize: 13, fontWeight: '900', color: '#64748B' },
+  lessonTextContent: { flex: 1, marginRight: 12 },
+  lessonTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B' },
+  lessonSub: { fontSize: 12, color: '#94A3B8', marginTop: 3, fontWeight: '500' },
+  actionArea: { width: 75, alignItems: 'flex-end' },
+  doneBtn: { backgroundColor: '#1E293B', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
+  doneBtnText: { color: '#FFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 });

@@ -18,7 +18,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -41,7 +41,16 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
-      "expo-video"
+      "expo-video",
+      "expo-font",
+      "expo-sqlite",
+      [
+        "expo-navigation-bar",
+        {
+          "visible": "none",
+          "behavior": "sticky-immersive"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

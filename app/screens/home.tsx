@@ -1,221 +1,227 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  StatusBar,
-  FlatList,
-  RefreshControl,
-  Alert,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import HomeHeader from '@/components/HomeHeader';
 import CourseCard from '@/components/CourseCard';
 import FooterNav from '@/components/FooterNav';
-import { Course } from '@/lib/type';
+import HomeHeader from '@/components/HomeHeader';
 import { supabase } from '@/lib/supabase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState('Guest');
 
-  const [continueLearning, setContinueLearning] = useState<Course[]>([]);
-  const [recommended, setRecommended] = useState<Course[]>([]);
-  const [mostPurchased, setMostPurchased] = useState<Course[]>([]);
+  const [continueLearning, setContinueLearning] = useState<any[]>([]);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [recommended, setRecommended] = useState<any[]>([]);
+  const [mostPurchased, setMostPurchased] = useState<any[]>([]);
 
-  /* ================= LOAD HOME DATA ================= */
   const loadHomeData = async () => {
     try {
-      /* 🔹 GET USER FROM STORAGE */
       const storedUser = await AsyncStorage.getItem('user');
       if (!storedUser) return;
-
       const localUser = JSON.parse(storedUser);
       setUserName(localUser.fullName || localUser.email?.split('@')[0]);
 
-      /* 🔹 FETCH REAL USER ID */
-      const { data: dbUser, error: userError } = await supabase
-        .from('users')
-        .select('id, full_name, email')
-        .eq('email', localUser.email)
-        .single();
+      const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
+      if (!dbUser) return;
 
-      if (userError || !dbUser) {
-        Alert.alert('Error', 'User not found');
-        return;
-      }
-
-      /* 🔹 CONTINUE LEARNING (ENROLLED COURSES) */
-      const { data: enrollments, error: enrollError } = await supabase
+      // 1. Fetch ALL Enrollments to separate In-Progress and Total Completed
+      const { data: allEnrollments } = await supabase
         .from('user_course_enrollments')
-        .select('courses (*)')
+        .select(`progress_percent, completed, courses (*)`)
         .eq('user_id', dbUser.id)
-        .eq('enrolled', true)
-        .eq('completed', false);
+        .eq('enrolled', true);
 
-      if (enrollError) {
-        console.error('Enrollment fetch error:', enrollError);
-      }
+      const inProgress = allEnrollments?.filter(e => e.progress_percent < 100) || [];
+      const completed = allEnrollments?.filter(e => e.progress_percent >= 100 || e.completed === true) || [];
 
-      const enrolledCourses =
-        enrollments
-          ?.map((row: any) => row.courses)
-          .filter(Boolean) || [];
+      setContinueLearning(inProgress);
+      setCompletedCount(completed.length);
 
-      setContinueLearning(enrolledCourses);
+      // 2. Fetch Recommended
+      const { data: rec } = await supabase.from('courses').select('*').eq('recommended', true);
+      setRecommended(rec || []);
 
-      /* 🔹 RECOMMENDED COURSES */
-      const { data: recommendedData } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('recommended', true)
-        .order('created_at', { ascending: false });
+      // 3. Fetch Most Purchased
+      const { data: purchased } = await supabase.from('courses').select('*').eq('most_purchased', true);
+      setMostPurchased(purchased || []);
 
-      setRecommended(recommendedData || []);
-
-      /* 🔹 MOST PURCHASED */
-      const { data: mostPurchasedData } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('most_purchased', true)
-        .order('created_at', { ascending: false });
-
-      setMostPurchased(mostPurchasedData || []);
     } catch (err) {
-      console.error('Home load error:', err);
+      console.error("Home Load Error:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    loadHomeData();
-  }, []);
+  useEffect(() => { loadHomeData(); }, []);
+  const onRefresh = useCallback(() => { setRefreshing(true); loadHomeData(); }, []);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadHomeData();
-  }, []);
-
-  /* ================= RENDER HELPERS ================= */
-  const renderHorizontalList = (data: Course[], key: string) => (
-    <FlatList
-      horizontal
-      data={data}
-      keyExtractor={(item) => `${key}-${item.id}`}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.listContent}
-      renderItem={({ item }) => (
-        <View style={styles.cardWrapper}>
-          <CourseCard
-            course={item}
-            onPress={() => router.push(`/screens/course/${item.id}`)}
-          />
-        </View>
-      )}
-    />
-  );
-
-  /* ================= LOADER ================= */
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingWrapper}>
-        <ActivityIndicator size="large" color="#D4AF37" />
-      </View>
+      <View style={styles.loader}><ActivityIndicator size="large" color="#D4AF37" /></View>
     );
   }
 
-  /* ================= UI ================= */
   return (
     <View style={styles.screenContainer}>
       <StatusBar barStyle="dark-content" />
       <HomeHeader userName={userName} />
 
-      <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {/* 🔹 CONTINUE LEARNING */}
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        
+        {/* CONTINUE LEARNING SECTION */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Continue Learning</Text>
-
-          {continueLearning.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text>No courses yet 📚</Text>
-              <TouchableOpacity
-                style={styles.exploreButton}
-                onPress={() => router.push('/screens/search')}
+          
+          {continueLearning.length > 0 ? (
+            /* SHOW IN-PROGRESS COURSES */
+            <FlatList
+              horizontal
+              data={continueLearning}
+              keyExtractor={(item) => `cont-${item.courses.id}`}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              renderItem={({ item }) => (
+                <View style={styles.cardWrapper}>
+                  <CourseCard
+                    course={item.courses}
+                    progressPercent={item.progress_percent}
+                    onPress={() => router.push(`/screens/course/${item.courses.id}`)}
+                  />
+                </View>
+              )}
+            />
+          ) : completedCount > 0 ? (
+            /* ALL COURSES COMPLETED MESSAGE */
+            <View style={styles.completionCard}>
+              <View style={styles.completionIconCircle}>
+                <MaterialCommunityIcons name="party-popper" size={32} color="#D4AF37" />
+              </View>
+              <View style={styles.completionTextContainer}>
+                <Text style={styles.completionTitle}>Great Job, {userName}!</Text>
+                <Text style={styles.completionSub}>You have successfully completed {completedCount} {completedCount === 1 ? 'course' : 'courses'}.</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.viewMyCoursesBtn}
+                onPress={() => router.push('/screens/my-courses')}
               >
-                <Text style={styles.exploreButtonText}>Explore Courses</Text>
+                <Text style={styles.viewMyCoursesText}>VIEW MY COURSES</Text>
+                <MaterialCommunityIcons name="arrow-right" size={16} color="#FFF" />
               </TouchableOpacity>
             </View>
           ) : (
-            renderHorizontalList(continueLearning, 'continue')
+            /* NO ENROLLMENTS AT ALL */
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Start your legal journey today! 📚</Text>
+              <TouchableOpacity style={styles.exploreButton} onPress={() => router.push('/screens/search')}>
+                <Text style={styles.exploreButtonText}>Explore Courses</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
-        {/* 🔹 RECOMMENDED */}
-        {recommended.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recommended</Text>
-            {renderHorizontalList(recommended, 'recommended')}
-          </View>
-        )}
+        {/* RECOMMENDED */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recommended</Text>
+          <FlatList
+            horizontal
+            data={recommended}
+            keyExtractor={(item) => `rec-${item.id}`}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <View style={styles.cardWrapper}>
+                <CourseCard course={item} onPress={() => router.push(`/screens/course/${item.id}`)} />
+              </View>
+            )}
+          />
+        </View>
 
-        {/* 🔹 MOST PURCHASED */}
-        {mostPurchased.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Most Purchased</Text>
-            {renderHorizontalList(mostPurchased, 'popular')}
-          </View>
-        )}
+        {/* MOST PURCHASED */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Most Purchased</Text>
+          <FlatList
+            horizontal
+            data={mostPurchased}
+            keyExtractor={(item) => `most-${item.id}`}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <View style={styles.cardWrapper}>
+                <CourseCard course={item} onPress={() => router.push(`/screens/course/${item.id}`)} />
+              </View>
+            )}
+          />
+        </View>
 
-        <View style={{ height: 120 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
-
       <FooterNav />
     </View>
   );
 }
 
-/* ================= STYLES ================= */
 const styles = StyleSheet.create({
   screenContainer: { flex: 1, backgroundColor: '#F9FAFB' },
-  loadingWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   section: { marginTop: 24 },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginLeft: 16,
-    marginBottom: 12,
-  },
-
+  sectionTitle: { fontSize: 19, fontWeight: '800', marginLeft: 16, marginBottom: 14, color: '#1E293B' },
   listContent: { paddingHorizontal: 16 },
-  cardWrapper: { width: 240, marginRight: 24 },
+  cardWrapper: { width: 260, marginRight: 20 },
 
-  emptyState: {
+  /* Completion Card Styles */
+  completionCard: {
     marginHorizontal: 16,
     backgroundColor: '#FFF',
-    padding: 24,
-    borderRadius: 16,
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#D4AF37',
+    shadowColor: '#D4AF37',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  completionIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  completionTextContainer: { alignItems: 'center', marginBottom: 16 },
+  completionTitle: { fontSize: 18, fontWeight: '900', color: '#1E293B' },
+  completionSub: { fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 4 },
+  viewMyCoursesBtn: {
+    backgroundColor: '#D4AF37',
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     alignItems: 'center',
   },
+  viewMyCoursesText: { color: '#FFF', fontWeight: '800', fontSize: 13, marginRight: 8 },
 
-  exploreButton: {
-    marginTop: 12,
-    backgroundColor: '#D4AF37',
-    padding: 12,
-    borderRadius: 10,
-  },
+  emptyState: { marginHorizontal: 16, padding: 20, backgroundColor: '#FFF', borderRadius: 16, alignItems: 'center' },
+  emptyText: { color: '#64748B', fontWeight: '600' },
+  exploreButton: { marginTop: 12, backgroundColor: '#1E293B', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   exploreButtonText: { color: '#FFF', fontWeight: '700' },
 });
