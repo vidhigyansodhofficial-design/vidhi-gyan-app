@@ -3,11 +3,10 @@ import { Palette } from '@/constants/theme';
 import { usePathname, useRouter } from 'expo-router';
 import React from 'react';
 import {
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -45,7 +44,8 @@ export default function FooterNav() {
     { name: 'Account', path: '/screens/account', icon: 'person' },
   ];
 
-  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 8);
+  // Reduced bottom padding for full screen mode
+  const bottomPadding = 12;
 
   const handlePress = (path: string) => {
     if (pathname !== path) {

@@ -187,7 +187,7 @@ export default function HomeScreen() {
           />
         </View>
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 75 }} />
       </ScrollView>
       <FooterNav />
     </View>

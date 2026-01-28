@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  SafeAreaView,
-  Platform,
-  StatusBar,
-} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useState } from 'react';
+import {
+  Image,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -68,13 +68,13 @@ export default function OnboardingScreen() {
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="light-content" />
-      <LinearGradient 
-        colors={['#0F172A', '#1E293B', '#000000']} 
+      <StatusBar barStyle="light-content" hidden={false} translucent={true} backgroundColor="transparent" />
+      <LinearGradient
+        colors={['#0F172A', '#1E293B', '#000000']}
         style={styles.gradient}
       >
         <SafeAreaView style={styles.safeArea}>
-          
+
           {/* Top Skip Button */}
           <TouchableOpacity onPress={handleSkip} style={styles.skipWrapper}>
             <Text style={styles.skipText}>SKIP</Text>
@@ -114,9 +114,9 @@ export default function OnboardingScreen() {
             </View>
 
             {/* Action Button */}
-            <TouchableOpacity 
-              activeOpacity={0.8} 
-              style={styles.nextButton} 
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.nextButton}
               onPress={handleNext}
             >
               <Text style={styles.buttonText}>

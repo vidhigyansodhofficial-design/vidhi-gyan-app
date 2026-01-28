@@ -129,7 +129,7 @@ export default function AuthScreen() {
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" hidden={false} translucent={true} backgroundColor="transparent" />
 
       <ImageBackground
         source={require("../../assets/images/law-background.jpg")}
