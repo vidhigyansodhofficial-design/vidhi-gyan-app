@@ -11,6 +11,7 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
+import * as ScreenCapture from 'expo-screen-capture';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ type TabType = 'Overview' | 'Syllabus' | 'Reviews';
 export default function CourseDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const [isScreenBlocked, setIsScreenBlocked] = useState(false);
   const courseId = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const [course, setCourse] = useState<any>(null);
@@ -35,9 +37,10 @@ export default function CourseDetailScreen() {
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [progressMap, setProgressMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [enrolling, setEnrolling] = useState(false); // New loading state for enroll button
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
 
-  /* ---------------- IMMERSIVE MODE LOGIC ---------------- */
+  /* ---------------- IMMERSIVE MODE & SECURITY ---------------- */
   useFocusEffect(
     useCallback(() => {
       const hideSystemBars = async () => {
@@ -68,22 +71,36 @@ export default function CourseDetailScreen() {
     }, [])
   );
 
-  /* ---------------- DYNAMIC FONT SCALING LOGIC ---------------- */
+  useFocusEffect(
+    useCallback(() => {
+      let subscription: ScreenCapture.Subscription | null = null;
+      const secureScreen = async () => {
+        try {
+          await ScreenCapture.preventScreenCaptureAsync();
+          subscription = ScreenCapture.addScreenshotListener(() => setIsScreenBlocked(true));
+        } catch (err) {
+          console.warn("Screen security error:", err);
+        }
+      };
+      secureScreen();
+      return () => {
+        ScreenCapture.allowScreenCaptureAsync();
+        subscription?.remove();
+        setIsScreenBlocked(false);
+      };
+    }, [])
+  );
+
+  /* ---------------- DYNAMIC DATA ---------------- */
   const titleConfig = useMemo(() => {
     const rawTitle = course?.title ? course.title.toUpperCase() : "COURSE PLAYER";
     let fontSize = 11; 
     let letterSpacing = 2;
-    if (rawTitle.length > 30) {
-      fontSize = 9;
-      letterSpacing = 1.2;
-    } else if (rawTitle.length > 20) {
-      fontSize = 10;
-      letterSpacing = 1.5;
-    }
+    if (rawTitle.length > 30) { fontSize = 9; letterSpacing = 1.2; }
+    else if (rawTitle.length > 20) { fontSize = 10; letterSpacing = 1.5; }
     return { title: rawTitle, fontSize, letterSpacing };
   }, [course]);
 
-  // Calculate local progress percentage for immediate UI feedback
   const progressPercent = useMemo(() => {
     if (!syllabus.length) return 0;
     const completedCount = Object.values(progressMap).filter(v => v === true).length;
@@ -136,43 +153,34 @@ export default function CourseDetailScreen() {
     }
   };
 
-  /* ---------------- MODIFIED MARK COMPLETED ---------------- */
-  // This function now updates the lesson progress AND the overall enrollment percentage
-  const markCompleted = async (sId: string) => {
+  /* ---------------- ACTION LOGIC ---------------- */
+  const handleEnroll = async () => {
     if (!userId || !courseId) return;
-
-    // 1. Update local state for immediate UI feedback
-    const updatedMap = { ...progressMap, [sId]: true };
-    setProgressMap(updatedMap);
-
-    // 2. Calculate new overall percentage
-    const completedCount = Object.values(updatedMap).filter(v => v === true).length;
-    const newPercent = Math.round((completedCount / syllabus.length) * 100);
-
+    setEnrolling(true);
     try {
-      // 3. Update lesson progress
-      await supabase.from('user_syllabus_progress').upsert({
+      const { error } = await supabase.from('user_course_enrollments').insert({
         user_id: userId,
         course_id: courseId,
-        syllabus_id: sId,
-        completed: true,
-        completed_at: new Date().toISOString(),
-        progress_percent: 100 // Mark specific lesson as 100%
-      }, { onConflict: 'user_id, syllabus_id' });
+        enrolled: true,
+      });
 
-      // 4. Update overall course enrollment progress (This shows on Home Card)
-      await supabase
-        .from('user_course_enrollments')
-        .update({ 
-            progress_percent: newPercent,
-            completed: newPercent >= 100 
-        })
-        .eq('user_id', userId)
-        .eq('course_id', courseId);
-
-    } catch (error) {
-      console.error("Error updating progress:", error);
+      if (error) throw error;
+      
+      setIsEnrolled(true);
+      Alert.alert("Success", "Welcome to the course!");
+    } catch (err: any) {
+      Alert.alert("Enrollment Failed", err.message);
+    } finally {
+      setEnrolling(false);
     }
+  };
+
+  const markCompleted = async (sId: string) => {
+    if (!userId) return;
+    setProgressMap(prev => ({ ...prev, [sId]: true }));
+    await supabase.from('user_syllabus_progress').upsert({
+      user_id: userId, course_id: courseId, syllabus_id: sId, completed: true, completed_at: new Date(),
+    });
   };
 
   if (loading || !course) {
@@ -181,8 +189,18 @@ export default function CourseDetailScreen() {
     );
   }
 
+  if (isScreenBlocked) {
+    return (
+      <View style={styles.blockedContainer}>
+        <MaterialCommunityIcons name="shield-lock" size={60} color="#D4AF37" />
+        <Text style={styles.blockedText}>SCREEN RECORDING BLOCKED</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
+      {/* 1. TOP BAR */}
       <View style={styles.premiumTopBar}>
         <View style={styles.headerContent}>
           <Text 
@@ -197,18 +215,35 @@ export default function CourseDetailScreen() {
 
       <StatusBar hidden />
       
+      {/* 2. VIDEO PLAYER AREA */}
       <View style={styles.videoSection}>
-        {activeVideo && (isEnrolled || syllabus.find(s => s.id === activeSyllabusId)?.preview) ? (
-          <WebView 
-            source={{ uri: activeVideo }} 
-            style={{ flex: 1 }} 
-            allowsFullscreenVideo 
-            javaScriptEnabled={true}
-          />
+        {isEnrolled ? (
+           activeVideo ? (
+            <WebView 
+              source={{ uri: activeVideo }} 
+              style={{ flex: 1 }} 
+              allowsFullscreenVideo 
+              javaScriptEnabled={true}
+            />
+          ) : (
+            <View style={styles.videoLockOverlay}><Text style={styles.lockText}>VIDEO UNAVAILABLE</Text></View>
+          )
         ) : (
           <View style={styles.videoLockOverlay}>
             <MaterialCommunityIcons name="lock-outline" size={40} color="#D4AF37" />
-            <Text style={styles.lockText}>ENROLL TO ACCESS MODULE</Text>
+            <Text style={styles.lockText}>ENROLL TO UNLOCK MODULE</Text>
+            <TouchableOpacity 
+              style={styles.enrollBtn} 
+              onPress={handleEnroll}
+              disabled={enrolling}
+            >
+              {enrolling ? <ActivityIndicator size="small" color="#FFF" /> : (
+                <>
+                  <MaterialCommunityIcons name="flash" size={16} color="#FFF" />
+                  <Text style={styles.enrollBtnText}>ENROLL NOW</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         )}
         <TouchableOpacity style={styles.videoBackButton} onPress={() => router.back()}>
@@ -216,6 +251,7 @@ export default function CourseDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 3. HEADER INFO */}
       <View style={styles.headerInfo}>
         <Text style={styles.courseTitle}>{course.title}</Text>
         <View style={styles.metaRow}>
@@ -227,6 +263,7 @@ export default function CourseDetailScreen() {
         </View>
       </View>
 
+      {/* 4. TABS & PROGRESS */}
       <View style={styles.tabArea}>
         <View style={styles.tabBar}>
           {(['Overview', 'Syllabus', 'Reviews'] as TabType[]).map((tab) => (
@@ -266,11 +303,17 @@ export default function CourseDetailScreen() {
             {syllabus.map((item, index) => (
               <TouchableOpacity 
                 key={item.id} 
-                style={[styles.lessonItem, activeSyllabusId === item.id && styles.lessonActive]}
+                style={[
+                    styles.lessonItem, 
+                    activeSyllabusId === item.id && styles.lessonActive,
+                    !isEnrolled && !item.preview && { opacity: 0.6 }
+                ]}
                 onPress={() => {
                   if (isEnrolled || item.preview) {
                     setActiveSyllabusId(item.id);
                     setActiveVideo(item.video_url);
+                  } else {
+                    Alert.alert("Locked", "Please enroll to view this module.");
                   }
                 }}
               >
@@ -285,12 +328,16 @@ export default function CourseDetailScreen() {
                 </View>
 
                 <View style={styles.actionArea}>
-                  {isEnrolled && !progressMap[item.id] ? (
-                    <TouchableOpacity style={styles.doneBtn} onPress={() => markCompleted(item.id)}>
-                      <Text style={styles.doneBtnText}>DONE</Text>
-                    </TouchableOpacity>
-                  ) : progressMap[item.id] ? (
-                    <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
+                  {isEnrolled ? (
+                    progressMap[item.id] ? (
+                        <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
+                    ) : (
+                        <TouchableOpacity style={styles.doneBtn} onPress={() => markCompleted(item.id)}>
+                            <Text style={styles.doneBtnText}>DONE</Text>
+                        </TouchableOpacity>
+                    )
+                  ) : item.preview ? (
+                    <Text style={styles.previewTag}>PREVIEW</Text>
                   ) : (
                     <MaterialCommunityIcons name="lock-outline" size={18} color="#CBD5E1" />
                   )}
@@ -313,33 +360,46 @@ export default function CourseDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  blockedContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  blockedText: { color: '#D4AF37', marginTop: 16, fontWeight: '900', letterSpacing: 1.2 },
+  
   premiumTopBar: { backgroundColor: '#D4AF37', paddingTop: Platform.OS === 'ios' ? 55 : 18, paddingBottom: 15, elevation: 4 },
   headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   premiumTitle: { fontWeight: '900', color: '#FFF', textAlign: 'center' },
+
   videoSection: { height: 230, backgroundColor: '#000', position: 'relative' },
-  videoLockOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A' },
-  lockText: { color: '#D4AF37', fontSize: 12, fontWeight: '800', marginTop: 10, letterSpacing: 1.2 },
+  videoLockOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A', padding: 20 },
+  lockText: { color: '#D4AF37', fontSize: 12, fontWeight: '800', marginTop: 10, marginBottom: 15, letterSpacing: 1.2 },
+  
+  enrollBtn: { backgroundColor: '#D4AF37', flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 25, borderRadius: 25, alignItems: 'center' },
+  enrollBtnText: { color: '#FFF', fontWeight: '900', fontSize: 12, marginLeft: 8, letterSpacing: 1 },
+
   videoBackButton: { position: 'absolute', top: 15, left: 15, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+
   headerInfo: { padding: 22 },
   courseTitle: { fontSize: 23, fontWeight: '900', color: '#1E293B', marginBottom: 10, lineHeight: 30 },
   metaRow: { flexDirection: 'row', alignItems: 'center' },
   metaText: { color: '#64748B', fontSize: 13, fontWeight: '600' },
   metaDivider: { marginHorizontal: 8, color: '#CBD5E1' },
+
   tabArea: { borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   tabBar: { flexDirection: 'row', paddingHorizontal: 20 },
   tabButton: { paddingVertical: 18, marginRight: 25, borderBottomWidth: 3, borderBottomColor: 'transparent' },
   activeTabButton: { borderBottomColor: '#D4AF37' },
   tabText: { fontSize: 14, fontWeight: '700', color: '#94A3B8' },
   activeTabText: { color: '#1E293B' },
+
   progressContainer: { paddingHorizontal: 22, paddingBottom: 18, paddingTop: 8 },
   progressTextRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   progressLabel: { fontSize: 11, fontWeight: '900', color: '#64748B', letterSpacing: 1 },
   progressPercentText: { fontSize: 13, fontWeight: '900', color: '#D4AF37' },
   progressBarBg: { height: 7, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#D4AF37' },
+
   contentPadding: { padding: 22 },
   sectionTitle: { fontSize: 19, fontWeight: '800', color: '#1E293B', marginBottom: 14 },
   bodyText: { fontSize: 15, color: '#475569', lineHeight: 26 },
+  
   lessonItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 14, marginBottom: 12, borderBottomWidth: 1.5, borderColor: '#F1F5F9', backgroundColor: '#FFF' },
   lessonActive: { backgroundColor: '#FFFDF5', borderColor: '#D4AF37' },
   lessonMain: { flexDirection: 'row', alignItems: 'center', flex: 1 },
@@ -348,7 +408,9 @@ const styles = StyleSheet.create({
   lessonTextContent: { flex: 1, marginRight: 12 },
   lessonTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B' },
   lessonSub: { fontSize: 12, color: '#94A3B8', marginTop: 3, fontWeight: '500' },
-  actionArea: { width: 75, alignItems: 'flex-end' },
+  
+  actionArea: { width: 85, alignItems: 'flex-end' },
+  previewTag: { fontSize: 10, fontWeight: '900', color: '#D4AF37', backgroundColor: '#FFFDF0', padding: 4, borderRadius: 4 },
   doneBtn: { backgroundColor: '#1E293B', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
   doneBtnText: { color: '#FFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 });
