@@ -1,22 +1,24 @@
+import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ScrollView,
-  View,
-  Text,
-  StyleSheet,
-  StatusBar,
+  ActivityIndicator,
   Alert,
-  TouchableOpacity,
   Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '@/lib/supabase';
-import Svg, { Path, Circle, Line } from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 // Components
-import HomeHeader from '@/components/HomeHeader';
 import FooterNav from '@/components/FooterNav';
+import HomeHeader from '@/components/HomeHeader';
 
 /* ================= ICONS ================= */
 const EditIcon = () => (
@@ -50,53 +52,134 @@ const LogoutIcon = () => (
 );
 
 /* ================= SCREEN ================= */
+import { Ionicons } from '@expo/vector-icons';
+
 export default function AccountScreen() {
   const router = useRouter();
   const [user, setUser] = useState({
+    id: '',
     name: 'User',
     email: '',
     courses: 0,
     completed: 0,
     learningTime: '0h',
   });
+  const [loading, setLoading] = useState(false);
+
+  // Modals & Sheets
+  const [activeModal, setActiveModal] = useState<'profile' | 'language' | 'theme' | 'terms' | 'privacy' | null>(null);
+
+  // Edit Profile State
+  const [editName, setEditName] = useState('');
+
+  // Settings State
+  const [language, setLanguage] = useState('English');
+  const [theme, setTheme] = useState('Light');
 
   useEffect(() => {
     loadAccountData();
+    loadSettings();
   }, []);
 
+  const loadSettings = async () => {
+    const l = await AsyncStorage.getItem('appLanguage');
+    const t = await AsyncStorage.getItem('appTheme');
+    if (l) setLanguage(l);
+    if (t) setTheme(t);
+  };
+
   const loadAccountData = async () => {
-    const storedUser = await AsyncStorage.getItem('user');
-    if (!storedUser) {
-      router.replace('/screens/auth/login');
+    try {
+      const storedUser = await AsyncStorage.getItem('user');
+      if (!storedUser) {
+        router.replace('/screens/auth/login');
+        return;
+      }
+
+      const localUser = JSON.parse(storedUser);
+      let userId = localUser.id;
+
+      // 1. Resolve User ID
+      if (!userId) {
+        const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
+        if (dbUser) {
+          userId = dbUser.id;
+          AsyncStorage.setItem('user', JSON.stringify({ ...localUser, id: userId }));
+        }
+      }
+      if (!userId) return;
+
+      // 2. Parallel Fetch
+      const [userRes, enrollRes] = await Promise.all([
+        supabase.from('users').select('id, full_name, email').eq('id', userId).single(),
+        supabase.from('user_course_enrollments').select('completed').eq('user_id', userId).eq('enrolled', true)
+      ]);
+
+      const dbUser = userRes.data;
+      if (!dbUser) return;
+
+      const enrollments = enrollRes.data || [];
+      const total = enrollments.length;
+      const completed = enrollments.filter((e: any) => e.completed).length;
+
+      setUser({
+        id: dbUser.id,
+        name: dbUser.full_name || 'User',
+        email: dbUser.email,
+        courses: total,
+        completed,
+        learningTime: `${total * 4}h`,
+      });
+      setEditName(dbUser.full_name || '');
+    } catch (e) {
+      console.error("Account Load Error:", e);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert("Error", "Name cannot be empty");
       return;
     }
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ full_name: editName })
+        .eq('id', user.id);
 
-    const localUser = JSON.parse(storedUser);
+      if (error) throw error;
 
-    const { data: dbUser } = await supabase
-      .from('users')
-      .select('id, full_name, email')
-      .eq('email', localUser.email)
-      .single();
+      setUser(prev => ({ ...prev, name: editName }));
 
-    if (!dbUser) return;
+      // Update local storage too so other screens might pick it up if they read from it
+      const storedUser = await AsyncStorage.getItem('user');
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        await AsyncStorage.setItem('user', JSON.stringify({ ...parsed, fullName: editName }));
+      }
 
-    const { data: enrollments } = await supabase
-      .from('user_course_enrollments')
-      .select('completed')
-      .eq('user_id', dbUser.id)
-      .eq('enrolled', true);
+      setActiveModal(null);
+      Alert.alert("Success", "Profile updated successfully");
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const total = enrollments?.length || 0;
-    const completed = enrollments?.filter(e => e.completed).length || 0;
+  const handleSaveLanguage = async (lang: string) => {
+    setLanguage(lang);
+    await AsyncStorage.setItem('appLanguage', lang);
+    setActiveModal(null);
+    Alert.alert("Language Changed", `App language set to ${lang}. (Requires restart to fully apply)`);
+  };
 
-    setUser({
-      name: dbUser.full_name || 'User',
-      email: dbUser.email,
-      courses: total,
-      completed,
-      learningTime: `${total * 4}h`,
-    });
+  const handleSaveTheme = async (thm: string) => {
+    setTheme(thm);
+    await AsyncStorage.setItem('appTheme', thm);
+    setActiveModal(null);
+    // In a real app, use a Context to toggle styles
   };
 
   const handleLogout = () => {
@@ -107,7 +190,7 @@ export default function AccountScreen() {
         style: 'destructive',
         onPress: async () => {
           await AsyncStorage.clear();
-          router.replace('/screens/auth/login');
+          router.replace('/screens/login');
         },
       },
     ]);
@@ -115,13 +198,12 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.container}>
-      {/* STATUS BAR FIX */}
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* HEADER */}
       <View style={styles.headerWrapper}>
-        <HomeHeader />
+        <HomeHeader userName={user.name} />
       </View>
 
       {/* CONTENT */}
@@ -138,7 +220,7 @@ export default function AccountScreen() {
               }}
               style={styles.avatar}
             />
-            <View style={{ marginLeft: 16 }}>
+            <View style={{ marginLeft: 16, flex: 1 }}>
               <Text style={styles.userName}>{user.name}</Text>
               <Text style={styles.userEmail}>{user.email}</Text>
             </View>
@@ -152,22 +234,51 @@ export default function AccountScreen() {
           </View>
 
           {/* SETTINGS */}
-          <Text style={styles.groupTitle}>Account</Text>
-          <Card>
-            <Menu icon={<EditIcon />} title="Edit Profile" />
-            <Menu icon={<LangIcon />} title="Language" />
-            <Menu icon={<ThemeIcon />} title="Theme" />
-          </Card>
+          <Text style={styles.groupTitle}>Settings</Text>
+          <View style={styles.card}>
+            <Menu
+              icon={<EditIcon />}
+              title="Edit Profile"
+              value={user.name}
+              onPress={() => setActiveModal('profile')}
+            />
+            <Menu
+              icon={<LangIcon />}
+              title="Language"
+              value={language}
+              onPress={() => setActiveModal('language')}
+            />
+            <Menu
+              icon={<ThemeIcon />}
+              title="Theme"
+              value={theme}
+              onPress={() => setActiveModal('theme')}
+            />
+          </View>
 
-          <Text style={styles.groupTitle}>Support</Text>
-          <Card>
+          <Text style={styles.groupTitle}>Legal</Text>
+          <View style={styles.card}>
+            <Menu
+              icon={<Ionicons name="document-text-outline" size={20} color="#555" />}
+              title="Terms & Conditions"
+              onPress={() => setActiveModal('terms')}
+            />
+            <Menu
+              icon={<Ionicons name="shield-checkmark-outline" size={20} color="#555" />}
+              title="Privacy Policy"
+              onPress={() => setActiveModal('privacy')}
+            />
+          </View>
+
+          <Text style={styles.groupTitle}>Session</Text>
+          <View style={styles.card}>
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
               <LogoutIcon />
               <Text style={styles.logoutText}>Sign Out</Text>
             </TouchableOpacity>
-          </Card>
+          </View>
 
-          <Text style={styles.version}>Vidhi Gyan Sodh v1.0.4</Text>
+          <Text style={styles.version}>Vidhi Gyan Sodh v1.0.5</Text>
         </ScrollView>
       </View>
 
@@ -175,6 +286,96 @@ export default function AccountScreen() {
       <View style={styles.footerWrapper}>
         <FooterNav />
       </View>
+
+      {/* ================= MODALS ================= */}
+
+      {/* 1. EDIT PROFILE MODAL */}
+      {activeModal === 'profile' && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
+            <Text style={styles.inputLabel}>Full Name</Text>
+            <TextInput
+              style={styles.textInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Enter your name"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setActiveModal(null)} style={styles.modalBtnCancel}>
+                <Text style={styles.modalBtnTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdateProfile} style={styles.modalBtnSave}>
+                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.modalBtnTextSave}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 2. LANGUAGE MODAL */}
+      {activeModal === 'language' && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select Language</Text>
+            {['English', 'Hindi', 'Marathi', 'Gujarati', 'Tamil'].map(lang => (
+              <TouchableOpacity
+                key={lang}
+                style={[styles.optionRow, language === lang && styles.optionSelected]}
+                onPress={() => handleSaveLanguage(lang)}
+              >
+                <Text style={[styles.optionText, language === lang && styles.optionTextSelected]}>{lang}</Text>
+                {language === lang && <Ionicons name="checkmark" size={20} color="#D4AF37" />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => setActiveModal(null)} style={styles.modalCloseLink}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* 3. THEME MODAL */}
+      {activeModal === 'theme' && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select Theme</Text>
+            {['Light', 'Dark (Chat)', 'System'].map(t => (
+              <TouchableOpacity
+                key={t}
+                style={[styles.optionRow, theme === t && styles.optionSelected]}
+                onPress={() => handleSaveTheme(t)}
+              >
+                <Text style={[styles.optionText, theme === t && styles.optionTextSelected]}>{t}</Text>
+                {theme === t && <Ionicons name="checkmark" size={20} color="#D4AF37" />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => setActiveModal(null)} style={styles.modalCloseLink}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* 4. TERMS / PRIVACY MODAL */}
+      {(activeModal === 'terms' || activeModal === 'privacy') && (
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { height: '70%' }]}>
+            <Text style={styles.modalTitle}>{activeModal === 'terms' ? 'Terms & Conditions' : 'Privacy Policy'}</Text>
+            <ScrollView style={{ marginTop: 10 }}>
+              <Text style={styles.legalText}>
+                {activeModal === 'terms'
+                  ? "Welcome to Vidhi Gyan Sodh. By using our app, you agree to the following terms...\n\n1. Content: All legal courses are for educational purposes.\n2. Usage: You may not redistribute videos.\n\n(This is a placeholder for the full legal text.)"
+                  : "We respect your privacy. This policy explains how we handle your data...\n\n1. Data Collection: We collect only what is needed for your learning progress.\n2. Security: Your data is encrypted.\n\n(This is a placeholder for the full privacy policy.)"}
+              </Text>
+            </ScrollView>
+            <TouchableOpacity onPress={() => setActiveModal(null)} style={[styles.modalBtnSave, { marginTop: 20 }]}>
+              <Text style={styles.modalBtnTextSave}>I Understand</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
     </View>
   );
 }
@@ -189,24 +390,22 @@ const Stat = ({ label, value, highlight = false }: any) => (
   </View>
 );
 
-const Card = ({ children }: any) => (
-  <View style={styles.card}>{children}</View>
-);
-
-const Menu = ({ icon, title }: any) => (
-  <View style={styles.menuItem}>
+const Menu = ({ icon, title, value, onPress }: any) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress}>
     <View style={styles.menuLeft}>
       <View style={styles.iconWrap}>{icon}</View>
-      <Text style={styles.menuTitle}>{title}</Text>
+      <View>
+        <Text style={styles.menuTitle}>{title}</Text>
+        {value && <Text style={styles.menuValue}>{value}</Text>}
+      </View>
     </View>
     <Text style={styles.menuArrow}>›</Text>
-  </View>
+  </TouchableOpacity>
 );
 
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA', paddingBottom: 70 },
-
   headerWrapper: { height: 180 },
 
   mainContent: {
@@ -217,10 +416,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
 
-  profileSection: { flexDirection: 'row', padding: 24 },
+  profileSection: { flexDirection: 'row', padding: 24, alignItems: 'center' },
   avatar: { width: 85, height: 85, borderRadius: 42.5, borderWidth: 3, borderColor: '#FFF' },
-  userName: { fontSize: 22, fontWeight: '800' },
-  userEmail: { fontSize: 14, color: '#666' },
+  userName: { fontSize: 22, fontWeight: '800', color: '#1E293B' },
+  userEmail: { fontSize: 14, color: '#94A3B8' },
+  editIconBtn: { backgroundColor: '#FFF', padding: 10, borderRadius: 20, elevation: 2 },
 
   statsGrid: {
     flexDirection: 'row',
@@ -229,24 +429,25 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     paddingVertical: 22,
     elevation: 4,
+    marginBottom: 20,
   },
   statBox: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 22, fontWeight: '800' },
   statLabel: { fontSize: 12, color: '#999', marginTop: 4 },
 
   groupTitle: {
-    marginTop: 35,
     marginLeft: 28,
     fontSize: 13,
     fontWeight: '800',
-    color: '#BBB',
+    color: '#94A3B8',
     letterSpacing: 1.2,
+    marginBottom: 10,
+    marginTop: 20,
   },
 
   card: {
     backgroundColor: '#FFF',
     marginHorizontal: 20,
-    marginTop: 10,
     borderRadius: 25,
     paddingHorizontal: 18,
   },
@@ -254,6 +455,7 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
@@ -268,7 +470,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 14,
   },
-  menuTitle: { fontSize: 16, fontWeight: '700' },
+  menuTitle: { fontSize: 16, fontWeight: '700', color: '#1E293B' },
+  menuValue: { fontSize: 12, color: '#D4AF37', marginTop: 2, fontWeight: '600' },
   menuArrow: { fontSize: 24, color: '#EEE' },
 
   logoutBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20 },
@@ -291,4 +494,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginVertical: 40,
   },
+
+  /* MODAL STYLES */
+  modalOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalCard: {
+    backgroundColor: '#FFF', width: '85%', borderRadius: 24, padding: 24,
+    elevation: 10,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', marginBottom: 20, textAlign: 'center' },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 8 },
+  textInput: {
+    backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
+    fontSize: 16, fontWeight: '600', color: '#334155', marginBottom: 24
+  },
+  modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
+  modalBtnCancel: { paddingVertical: 12, paddingHorizontal: 20 },
+  modalBtnTextCancel: { color: '#64748B', fontWeight: '700' },
+  modalBtnSave: {
+    backgroundColor: '#D4AF37', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12,
+    minWidth: 100, alignItems: 'center'
+  },
+  modalBtnTextSave: { color: '#FFF', fontWeight: '800' },
+
+  optionRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9'
+  },
+  optionSelected: { backgroundColor: '#FDFBEF', marginHorizontal: -10, paddingHorizontal: 10, borderRadius: 8 },
+  optionText: { fontSize: 16, fontWeight: '600', color: '#475569' },
+  optionTextSelected: { color: '#D4AF37', fontWeight: '800' },
+  modalCloseLink: { alignItems: 'center', marginTop: 20 },
+  modalCloseText: { color: '#94A3B8', fontWeight: '700' },
+
+  legalText: { color: '#444', lineHeight: 22, fontSize: 14 },
 });

@@ -1,4 +1,3 @@
-import { Palette } from "@/constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -19,6 +18,8 @@ import {
   View,
 } from "react-native";
 
+import { supabase } from "@/lib/supabase"; // ✅ IMPORT SUPABASE
+
 export default function AuthScreen() {
   const router = useRouter();
 
@@ -31,29 +32,29 @@ export default function AuthScreen() {
   const emailInputRef = useRef<TextInput>(null);
   const otpInputRef = useRef<TextInput>(null);
 
-  // ================= AUTO FOCUS OTP =================
+  /* ================= AUTO FOCUS OTP ================= */
   useEffect(() => {
     if (showOtpScreen) {
       setTimeout(() => otpInputRef.current?.focus(), 400);
     }
   }, [showOtpScreen]);
 
-  // ================= AUTO VERIFY OTP =================
+  /* ================= AUTO VERIFY OTP ================= */
   useEffect(() => {
-    if (otp.length === 6 && !isLoading) {
+    if (otp.length === 6 && !isLoading && showOtpScreen) {
       handleVerifyOtp();
     }
   }, [otp]);
 
-  // ================= SEND OTP =================
+  /* ================= SEND OTP ================= */
   const handleSendOtp = async () => {
-    if (!email || !fullName) {
-      Alert.alert("Error", "Please enter your name & email");
+    if (!email) {
+      Alert.alert("Error", "Please enter email");
       return;
     }
-  
+
     setIsLoading(true);
-  
+
     try {
       const response = await fetch(
         "https://otp-nu-nine.vercel.app/api/send-otp",
@@ -62,12 +63,16 @@ export default function AuthScreen() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email,
-            fullName, // ✅ send name to backend
+            fullName: fullName || undefined, // ✅ optional
           }),
         }
       );
-  
+
+      const data = await response.json();
+
       if (!response.ok) throw new Error();
+
+      Alert.alert("OTP Sent", data.message || "Check your email for OTP");
       setShowOtpScreen(true);
     } catch {
       Alert.alert("Error", "Failed to send OTP. Try again.");
@@ -75,10 +80,8 @@ export default function AuthScreen() {
       setIsLoading(false);
     }
   };
-  
-  
 
-  // ================= VERIFY OTP =================
+  /* ================= VERIFY OTP ================= */
   const handleVerifyOtp = async () => {
     if (otp.length !== 6) return;
 
@@ -93,18 +96,31 @@ export default function AuthScreen() {
           body: JSON.stringify({ email, otp: otp.trim() }),
         }
       );
-      
 
       if (!response.ok) throw new Error("Invalid OTP");
 
+      // ✅ FETCH USER (NO UPSERT ON CLIENT)
+      const { data: user, error } = await supabase
+        .from("users")
+        .select("id, email, full_name")
+        .eq("email", email.toLowerCase())
+        .single();
+
+      if (error || !user) throw error;
+
       await AsyncStorage.setItem(
         "user",
-        JSON.stringify({ email, fullName })
+        JSON.stringify({
+          id: user.id,
+          email: user.email,
+          fullName: user.full_name,
+        })
       );
 
       router.replace("/screens/home");
-    } catch {
-      Alert.alert("Error", "Invalid or expired OTP");
+    } catch (err) {
+      console.log(err);
+      Alert.alert("Error", "Invalid OTP or Server Error");
       setOtp("");
     } finally {
       setIsLoading(false);
@@ -153,7 +169,7 @@ export default function AuthScreen() {
                 {!showOtpScreen ? (
                   <View style={styles.form}>
                     <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>FULL NAME</Text>
+                      <Text style={styles.inputLabel}>FULL NAME (optional)</Text>
                       <TextInput
                         style={styles.premiumInput}
                         placeholder="e.g. Shubham Kumar"
@@ -228,7 +244,10 @@ export default function AuthScreen() {
                     )}
 
                     <TouchableOpacity
-                      onPress={() => !isLoading && setShowOtpScreen(false)}
+                      onPress={() => {
+                        setOtp("");
+                        setShowOtpScreen(false);
+                      }}
                       style={styles.backButton}
                     >
                       <Text style={styles.backButtonText}>
@@ -246,7 +265,7 @@ export default function AuthScreen() {
   );
 }
 
-/* ================= STYLES ================= */
+/* ================= STYLES (UNCHANGED) ================= */
 
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: "#000" },

@@ -1,23 +1,23 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as NavigationBar from 'expo-navigation-bar';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import * as ScreenCapture from 'expo-screen-capture';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  StatusBar,
   Alert,
   Dimensions,
   Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import * as ScreenCapture from 'expo-screen-capture';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as NavigationBar from 'expo-navigation-bar';
 
 const { width } = Dimensions.get('window');
 
@@ -94,7 +94,7 @@ export default function CourseDetailScreen() {
   /* ---------------- DYNAMIC DATA ---------------- */
   const titleConfig = useMemo(() => {
     const rawTitle = course?.title ? course.title.toUpperCase() : "COURSE PLAYER";
-    let fontSize = 11; 
+    let fontSize = 11;
     let letterSpacing = 2;
     if (rawTitle.length > 30) { fontSize = 9; letterSpacing = 1.2; }
     else if (rawTitle.length > 20) { fontSize = 10; letterSpacing = 1.5; }
@@ -124,28 +124,49 @@ export default function CourseDetailScreen() {
         return;
       }
       const localUser = JSON.parse(stored);
-      const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
-      if (!dbUser) return;
-      setUserId(dbUser.id);
 
-      const { data: courseData } = await supabase.from('courses').select('*').eq('id', courseId).single();
-      setCourse(courseData);
+      let uId = localUser.id;
+      if (!uId) {
+        const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
+        if (dbUser) {
+          uId = dbUser.id;
+          AsyncStorage.setItem('user', JSON.stringify({ ...localUser, id: uId }));
+        }
+      }
+      setUserId(uId);
 
-      const { data: syllabusData } = await supabase.from('course_syllabus').select('*').eq('course_id', courseId).order('order_index');
-      setSyllabus(syllabusData || []);
+      // PARALLEL REQUESTS
+      const [courseRes, syllabusRes, enrollRes, progressRes] = await Promise.all([
+        // 1. Course Details
+        supabase.from('courses').select('title, instructor, description, total_duration, lectures, topics, image').eq('id', courseId).single(),
+        // 2. Syllabus
+        supabase.from('course_syllabus').select('*').eq('course_id', courseId).order('order_index'),
+        // 3. Enrollment (only if user known)
+        uId ? supabase.from('user_course_enrollments').select('*').eq('user_id', uId).eq('course_id', courseId).maybeSingle() : Promise.resolve({ data: null }),
+        // 4. Progress (only if user known)
+        uId ? supabase.from('user_syllabus_progress').select('syllabus_id, completed').eq('user_id', uId).eq('course_id', courseId) : Promise.resolve({ data: [] })
+      ]);
 
-      if (syllabusData?.length) {
-        setActiveVideo(syllabusData[0].video_url);
-        setActiveSyllabusId(syllabusData[0].id);
+      setCourse(courseRes.data);
+
+      const syllabusData = syllabusRes.data || [];
+      setSyllabus(syllabusData);
+
+      if (syllabusData.length) {
+        // Only set if not already set (re-renders shouldn't reset active video ideally, but for initial load it's fine)
+        if (!activeVideo) {
+          setActiveVideo(syllabusData[0].video_url);
+          setActiveSyllabusId(syllabusData[0].id);
+        }
       }
 
-      const { data: enrollment } = await supabase.from('user_course_enrollments').select('*').eq('user_id', dbUser.id).eq('course_id', courseId).maybeSingle();
-      setIsEnrolled(!!enrollment);
+      setIsEnrolled(!!enrollRes.data);
 
-      const { data: progressRows } = await supabase.from('user_syllabus_progress').select('syllabus_id, completed').eq('user_id', dbUser.id).eq('course_id', courseId);
+      const progressRows = progressRes.data || [];
       const map: Record<string, boolean> = {};
-      progressRows?.forEach(p => (map[p.syllabus_id] = p.completed));
+      progressRows.forEach((p: any) => (map[p.syllabus_id] = p.completed));
       setProgressMap(map);
+
     } catch (e) {
       console.error(e);
     } finally {
@@ -165,7 +186,7 @@ export default function CourseDetailScreen() {
       });
 
       if (error) throw error;
-      
+
       setIsEnrolled(true);
       Alert.alert("Success", "Welcome to the course!");
     } catch (err: any) {
@@ -177,10 +198,58 @@ export default function CourseDetailScreen() {
 
   const markCompleted = async (sId: string) => {
     if (!userId) return;
-    setProgressMap(prev => ({ ...prev, [sId]: true }));
-    await supabase.from('user_syllabus_progress').upsert({
-      user_id: userId, course_id: courseId, syllabus_id: sId, completed: true, completed_at: new Date(),
-    });
+
+    // 1. Optimistic Update Local State
+    const wasAlreadyCompleted = progressMap[sId];
+    if (wasAlreadyCompleted) return; // Should not happen if button is hidden, but safety check
+
+    const newMap = { ...progressMap, [sId]: true };
+    setProgressMap(newMap);
+
+    // 2. Calculate New Progress
+    const totalItems = syllabus.length;
+    const completedCount = Object.values(newMap).filter(v => v === true).length;
+    // accurate percentage
+    const newPercent = totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
+    const isCompleted = newPercent === 100;
+
+    try {
+      // 3. Update Syllabus Progress
+      const item = syllabus.find(s => s.id === sId);
+      const { error: syllabusError } = await supabase.from('user_syllabus_progress').upsert({
+        user_id: userId,
+        course_id: courseId,
+        syllabus_id: sId,
+        completed: true,
+        completed_at: new Date(),
+        progress_percent: 100,
+        watched_seconds: item?.total_duration_sec || 0,
+      });
+
+      if (syllabusError) throw syllabusError;
+
+      // 4. Update Course Enrollment Progress (Realtime sync for Home Page)
+      const { error: enrollmentError } = await supabase
+        .from('user_course_enrollments')
+        .update({
+          progress_percent: newPercent,
+          completed: isCompleted,
+          // Update enrolled_at or last_accessed if you want to sort by recent
+        })
+        .eq('user_id', userId)
+        .eq('course_id', courseId);
+
+      if (enrollmentError) throw enrollmentError;
+
+      if (isCompleted) {
+        Alert.alert("Course Completed!", "Congratulations! You have finished this course.");
+      }
+
+    } catch (err: any) {
+      console.error("Progress Update Failed:", err);
+      Alert.alert("Error", "Failed to save progress.");
+      // Revert local state if needed, but keeping it simple for now
+    }
   };
 
   if (loading || !course) {
@@ -203,8 +272,8 @@ export default function CourseDetailScreen() {
       {/* 1. TOP BAR */}
       <View style={styles.premiumTopBar}>
         <View style={styles.headerContent}>
-          <Text 
-            style={[styles.premiumTitle, { fontSize: titleConfig.fontSize, letterSpacing: titleConfig.letterSpacing }]} 
+          <Text
+            style={[styles.premiumTitle, { fontSize: titleConfig.fontSize, letterSpacing: titleConfig.letterSpacing }]}
             numberOfLines={1}
             adjustsFontSizeToFit={true}
           >
@@ -214,16 +283,26 @@ export default function CourseDetailScreen() {
       </View>
 
       <StatusBar hidden />
-      
+
       {/* 2. VIDEO PLAYER AREA */}
       <View style={styles.videoSection}>
         {isEnrolled ? (
-           activeVideo ? (
-            <WebView 
-              source={{ uri: activeVideo }} 
-              style={{ flex: 1 }} 
-              allowsFullscreenVideo 
+          activeVideo ? (
+            <WebView
+              source={{ uri: activeVideo }}
+              style={{ flex: 1, backgroundColor: '#000' }}
+              allowsFullscreenVideo
               javaScriptEnabled={true}
+              domStorageEnabled={true}
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+                  <ActivityIndicator size="large" color="#D4AF37" />
+                </View>
+              )}
+              androidHardwareAccelerationDisabled={false}
             />
           ) : (
             <View style={styles.videoLockOverlay}><Text style={styles.lockText}>VIDEO UNAVAILABLE</Text></View>
@@ -232,8 +311,8 @@ export default function CourseDetailScreen() {
           <View style={styles.videoLockOverlay}>
             <MaterialCommunityIcons name="lock-outline" size={40} color="#D4AF37" />
             <Text style={styles.lockText}>ENROLL TO UNLOCK MODULE</Text>
-            <TouchableOpacity 
-              style={styles.enrollBtn} 
+            <TouchableOpacity
+              style={styles.enrollBtn}
               onPress={handleEnroll}
               disabled={enrolling}
             >
@@ -267,8 +346,8 @@ export default function CourseDetailScreen() {
       <View style={styles.tabArea}>
         <View style={styles.tabBar}>
           {(['Overview', 'Syllabus', 'Reviews'] as TabType[]).map((tab) => (
-            <TouchableOpacity 
-              key={tab} 
+            <TouchableOpacity
+              key={tab}
               onPress={() => setActiveTab(tab)}
               style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
             >
@@ -276,16 +355,16 @@ export default function CourseDetailScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        
+
         {isEnrolled && (
           <View style={styles.progressContainer}>
-             <View style={styles.progressTextRow}>
-                <Text style={styles.progressLabel}>MODULE PROGRESS</Text>
-                <Text style={styles.progressPercentText}>{progressPercent}%</Text>
-             </View>
-             <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
-             </View>
+            <View style={styles.progressTextRow}>
+              <Text style={styles.progressLabel}>MODULE PROGRESS</Text>
+              <Text style={styles.progressPercentText}>{progressPercent}%</Text>
+            </View>
+            <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+            </View>
           </View>
         )}
       </View>
@@ -301,12 +380,12 @@ export default function CourseDetailScreen() {
         {activeTab === 'Syllabus' && (
           <View style={styles.contentPadding}>
             {syllabus.map((item, index) => (
-              <TouchableOpacity 
-                key={item.id} 
+              <TouchableOpacity
+                key={item.id}
                 style={[
-                    styles.lessonItem, 
-                    activeSyllabusId === item.id && styles.lessonActive,
-                    !isEnrolled && !item.preview && { opacity: 0.6 }
+                  styles.lessonItem,
+                  activeSyllabusId === item.id && styles.lessonActive,
+                  !isEnrolled && !item.preview && { opacity: 0.6 }
                 ]}
                 onPress={() => {
                   if (isEnrolled || item.preview) {
@@ -318,23 +397,23 @@ export default function CourseDetailScreen() {
                 }}
               >
                 <View style={styles.lessonMain}>
-                   <View style={styles.numberBox}>
-                     <Text style={styles.numberText}>{index + 1}</Text>
-                   </View>
-                   <View style={styles.lessonTextContent}>
-                     <Text style={styles.lessonTitle} numberOfLines={1}>{item.title}</Text>
-                     <Text style={styles.lessonSub}>{item.duration || '0'} mins</Text>
-                   </View>
+                  <View style={styles.numberBox}>
+                    <Text style={styles.numberText}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.lessonTextContent}>
+                    <Text style={styles.lessonTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.lessonSub}>{item.duration || '0'} mins</Text>
+                  </View>
                 </View>
 
                 <View style={styles.actionArea}>
                   {isEnrolled ? (
                     progressMap[item.id] ? (
-                        <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
+                      <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
                     ) : (
-                        <TouchableOpacity style={styles.doneBtn} onPress={() => markCompleted(item.id)}>
-                            <Text style={styles.doneBtnText}>DONE</Text>
-                        </TouchableOpacity>
+                      <TouchableOpacity style={styles.doneBtn} onPress={() => markCompleted(item.id)}>
+                        <Text style={styles.doneBtnText}>DONE</Text>
+                      </TouchableOpacity>
                     )
                   ) : item.preview ? (
                     <Text style={styles.previewTag}>PREVIEW</Text>
@@ -362,7 +441,7 @@ const styles = StyleSheet.create({
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   blockedContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   blockedText: { color: '#D4AF37', marginTop: 16, fontWeight: '900', letterSpacing: 1.2 },
-  
+
   premiumTopBar: { backgroundColor: '#D4AF37', paddingTop: Platform.OS === 'ios' ? 55 : 18, paddingBottom: 15, elevation: 4 },
   headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   premiumTitle: { fontWeight: '900', color: '#FFF', textAlign: 'center' },
@@ -370,7 +449,7 @@ const styles = StyleSheet.create({
   videoSection: { height: 230, backgroundColor: '#000', position: 'relative' },
   videoLockOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A', padding: 20 },
   lockText: { color: '#D4AF37', fontSize: 12, fontWeight: '800', marginTop: 10, marginBottom: 15, letterSpacing: 1.2 },
-  
+
   enrollBtn: { backgroundColor: '#D4AF37', flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 25, borderRadius: 25, alignItems: 'center' },
   enrollBtnText: { color: '#FFF', fontWeight: '900', fontSize: 12, marginLeft: 8, letterSpacing: 1 },
 
@@ -399,7 +478,7 @@ const styles = StyleSheet.create({
   contentPadding: { padding: 22 },
   sectionTitle: { fontSize: 19, fontWeight: '800', color: '#1E293B', marginBottom: 14 },
   bodyText: { fontSize: 15, color: '#475569', lineHeight: 26 },
-  
+
   lessonItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 14, marginBottom: 12, borderBottomWidth: 1.5, borderColor: '#F1F5F9', backgroundColor: '#FFF' },
   lessonActive: { backgroundColor: '#FFFDF5', borderColor: '#D4AF37' },
   lessonMain: { flexDirection: 'row', alignItems: 'center', flex: 1 },
@@ -408,7 +487,7 @@ const styles = StyleSheet.create({
   lessonTextContent: { flex: 1, marginRight: 12 },
   lessonTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B' },
   lessonSub: { fontSize: 12, color: '#94A3B8', marginTop: 3, fontWeight: '500' },
-  
+
   actionArea: { width: 85, alignItems: 'flex-end' },
   previewTag: { fontSize: 10, fontWeight: '900', color: '#D4AF37', backgroundColor: '#FFFDF0', padding: 4, borderRadius: 4 },
   doneBtn: { backgroundColor: '#1E293B', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },

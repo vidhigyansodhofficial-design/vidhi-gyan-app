@@ -4,8 +4,8 @@ import HomeHeader from '@/components/HomeHeader';
 import { supabase } from '@/lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -29,36 +29,50 @@ export default function HomeScreen() {
   const [recommended, setRecommended] = useState<any[]>([]);
   const [mostPurchased, setMostPurchased] = useState<any[]>([]);
 
-  const loadHomeData = async () => {
+  const loadHomeData = useCallback(async () => {
     try {
       const storedUser = await AsyncStorage.getItem('user');
       if (!storedUser) return;
       const localUser = JSON.parse(storedUser);
       setUserName(localUser.fullName || localUser.email?.split('@')[0]);
 
-      const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
-      if (!dbUser) return;
+      let userId = localUser.id;
+      if (!userId) {
+        const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
+        if (dbUser) {
+          userId = dbUser.id;
+          AsyncStorage.setItem('user', JSON.stringify({ ...localUser, id: userId }));
+        }
+      }
+      if (!userId) return;
 
-      // 1. Fetch ALL Enrollments to separate In-Progress and Total Completed
-      const { data: allEnrollments } = await supabase
-        .from('user_course_enrollments')
-        .select(`progress_percent, completed, courses (*)`)
-        .eq('user_id', dbUser.id)
-        .eq('enrolled', true);
+      // PARALLEL FETCHING
+      const [enrollRes, recRes, purchRes] = await Promise.all([
+        supabase
+          .from('user_course_enrollments')
+          .select(`progress_percent, completed, courses (id, title, instructor, image, rating, price, total_duration, lectures)`)
+          .eq('user_id', userId)
+          .eq('enrolled', true),
 
-      const inProgress = allEnrollments?.filter(e => e.progress_percent < 100) || [];
-      const completed = allEnrollments?.filter(e => e.progress_percent >= 100 || e.completed === true) || [];
+        supabase
+          .from('courses')
+          .select('id, title, instructor, image, rating, price, total_duration, lectures')
+          .eq('recommended', true),
+
+        supabase
+          .from('courses')
+          .select('id, title, instructor, image, rating, price, total_duration, lectures')
+          .eq('most_purchased', true)
+      ]);
+
+      const allEnrollments = enrollRes.data || [];
+      const inProgress = allEnrollments.filter((e: any) => e.progress_percent < 100);
+      const completed = allEnrollments.filter((e: any) => e.progress_percent >= 100 || e.completed === true);
 
       setContinueLearning(inProgress);
       setCompletedCount(completed.length);
-
-      // 2. Fetch Recommended
-      const { data: rec } = await supabase.from('courses').select('*').eq('recommended', true);
-      setRecommended(rec || []);
-
-      // 3. Fetch Most Purchased
-      const { data: purchased } = await supabase.from('courses').select('*').eq('most_purchased', true);
-      setMostPurchased(purchased || []);
+      setRecommended(recRes.data || []);
+      setMostPurchased(purchRes.data || []);
 
     } catch (err) {
       console.error("Home Load Error:", err);
@@ -66,9 +80,13 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadHomeData(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadHomeData();
+    }, [loadHomeData])
+  );
   const onRefresh = useCallback(() => { setRefreshing(true); loadHomeData(); }, []);
 
   if (loading && !refreshing) {
@@ -83,11 +101,11 @@ export default function HomeScreen() {
       <HomeHeader userName={userName} />
 
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        
+
         {/* CONTINUE LEARNING SECTION */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Continue Learning</Text>
-          
+
           {continueLearning.length > 0 ? (
             /* SHOW IN-PROGRESS COURSES */
             <FlatList
@@ -116,7 +134,7 @@ export default function HomeScreen() {
                 <Text style={styles.completionTitle}>Great Job, {userName}!</Text>
                 <Text style={styles.completionSub}>You have successfully completed {completedCount} {completedCount === 1 ? 'course' : 'courses'}.</Text>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.viewMyCoursesBtn}
                 onPress={() => router.push('/screens/my-courses')}
               >

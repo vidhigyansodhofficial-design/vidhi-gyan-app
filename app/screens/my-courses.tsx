@@ -1,23 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import {
-  ScrollView,
-  View,
-  Text,
-  StyleSheet,
-  StatusBar,
-  ActivityIndicator,
-  Alert,
-  TouchableOpacity,
-  Image,
-} from 'react-native';
-import { Stack, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Course } from '@/lib/type';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 // Components
-import HomeHeader from '@/components/HomeHeader';
 import FooterNav from '@/components/FooterNav';
+import HomeHeader from '@/components/HomeHeader';
 
 interface EnrolledCourse extends Course {
   progress_percent: number;
@@ -28,12 +28,10 @@ export default function MyCoursesScreen() {
   const [courses, setCourses] = useState<EnrolledCourse[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchEnrolledCourses();
-  }, []);
+
 
   /* ================= FETCH ENROLLED COURSES ================= */
-  const fetchEnrolledCourses = async () => {
+  const fetchEnrolledCourses = useCallback(async () => {
     try {
       const storedUser = await AsyncStorage.getItem('user');
       if (!storedUser) {
@@ -42,14 +40,16 @@ export default function MyCoursesScreen() {
       }
 
       const localUser = JSON.parse(storedUser);
+      let userId = localUser.id;
 
-      const { data: dbUser, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', localUser.email)
-        .single();
-
-      if (userError || !dbUser) {
+      if (!userId) {
+        const { data: dbUser } = await supabase.from('users').select('id').eq('email', localUser.email).single();
+        if (dbUser) {
+          userId = dbUser.id;
+          AsyncStorage.setItem('user', JSON.stringify({ ...localUser, id: userId }));
+        }
+      }
+      if (!userId) {
         Alert.alert('Error', 'User not found');
         return;
       }
@@ -58,9 +58,9 @@ export default function MyCoursesScreen() {
         .from('user_course_enrollments')
         .select(`
           progress_percent,
-          courses (*)
+          courses (id, title, instructor, image, rating, price, total_duration)
         `)
-        .eq('user_id', dbUser.id)
+        .eq('user_id', userId)
         .eq('enrolled', true)
         .order('enrolled_at', { ascending: false });
 
@@ -78,7 +78,13 @@ export default function MyCoursesScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchEnrolledCourses();
+    }, [fetchEnrolledCourses])
+  );
 
   /* ================= UI ================= */
   return (
