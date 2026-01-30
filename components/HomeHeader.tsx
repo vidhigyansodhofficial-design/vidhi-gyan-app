@@ -2,12 +2,10 @@ import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Notifications from 'expo-notifications';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Image,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,6 +15,9 @@ import {
 } from 'react-native';
 import { IconSymbol } from './ui/icon-symbol';
 
+// Import our safe wrapper
+import Notifications from '@/lib/notifications';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -25,14 +26,16 @@ Notifications.setNotificationHandler({
   }),
 });
 
+
+
 export default function HomeHeader() {
   const [userName, setUserName] = useState<string>('User');
   const [userId, setUserId] = useState<string | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string>('');
-  const [notifications, setNotifications] = useState<Notifications.Notification[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
-  const notificationListener = useRef<Notifications.EventSubscription>();
-  const responseListener = useRef<Notifications.EventSubscription>();
+  const notificationListener = useRef<any>();
+  const responseListener = useRef<any>();
 
   useEffect(() => {
     loadUser();
@@ -118,7 +121,7 @@ export default function HomeHeader() {
       console.log('Failed to load cleared notifications', e);
     }
 
-    const dbNotifications: Notifications.Notification[] = data.map((item: any) => {
+    const dbNotifications: any[] = data.map((item: any) => {
       const isCompleted = item.completed;
       const title = isCompleted ? "Course Completed" : "Course Enrolled";
       const body = isCompleted
@@ -139,7 +142,7 @@ export default function HomeHeader() {
           },
           trigger: { type: 'push' }
         }
-      } as unknown as Notifications.Notification;
+      } as unknown as any;
     }).filter(n => !clearedIds.has(n.request.identifier));
 
     setNotifications(prev => {
@@ -261,7 +264,7 @@ export default function HomeHeader() {
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
       >
-        <SafeAreaView>
+        <View>
           <View style={styles.headerContainer}>
 
             {/* LEFT SECTION */}
@@ -273,7 +276,7 @@ export default function HomeHeader() {
                 />
               </View>
               <View style={styles.textContainer}>
-                <Text style={styles.brandTitle} numberOfLines={1}>Vidhi Gyan Sodh</Text>
+                <Text style={styles.brandTitle} numberOfLines={1}>Vidhi Gyan Shodh</Text>
                 <Text style={styles.subtitle} numberOfLines={1}>Welcome, {userName}</Text>
               </View>
             </View>
@@ -300,7 +303,7 @@ export default function HomeHeader() {
             </View>
 
           </View>
-        </SafeAreaView>
+        </View>
 
       </LinearGradient>
 

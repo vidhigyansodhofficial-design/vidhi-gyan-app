@@ -18,15 +18,15 @@ export async function handler(event) {
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: "vidhigyansodh.official@gmail.com",
+        user: "vidhigyanShodh.official@gmail.com",
         pass: "ngzv gmty yuig fyun",
       },
     });
 
     await transporter.sendMail({
-      from: "Vidhi Gyan Sodh <vidhigyansodh.official@gmail.com>",
+      from: "Vidhi Gyan Shodh <vidhigyanShodh.official@gmail.com>",
       to: email,
-      subject: "Your OTP - Vidhi Gyan Sodh",
+      subject: "Your OTP - Vidhi Gyan Shodh",
       html: `<h2>Your OTP is <b>${otp}</b></h2><p>Valid for 5 minutes</p>`,
     });
 

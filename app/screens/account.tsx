@@ -1,58 +1,33 @@
 import { supabase } from '@/lib/supabase';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
 
-// Components
 import FooterNav from '@/components/FooterNav';
 import HomeHeader from '@/components/HomeHeader';
 
 /* ================= ICONS ================= */
-const EditIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#B8860B" strokeWidth="2">
-    <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-    <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-  </Svg>
-);
+const EditIcon = () => <MaterialCommunityIcons name="account-edit-outline" size={24} color="#64748B" />;
+const LangIcon = () => <MaterialCommunityIcons name="translate" size={24} color="#64748B" />;
+const ThemeIcon = () => <MaterialCommunityIcons name="theme-light-dark" size={24} color="#64748B" />;
+const ShareIcon = () => <MaterialCommunityIcons name="share-variant-outline" size={24} color="#64748B" />;
+const SupportIcon = () => <MaterialCommunityIcons name="lifebuoy" size={24} color="#64748B" />;
 
-const LangIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
-    <Circle cx="12" cy="12" r="10" />
-    <Line x1="2" y1="12" x2="22" y2="12" />
-    <Path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-  </Svg>
-);
-
-const ThemeIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
-    <Path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-  </Svg>
-);
-
-const LogoutIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#FF4D4D" strokeWidth="2">
-    <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <Line x1="16" y1="17" x2="21" y2="12" />
-    <Line x1="16" y1="7" x2="21" y2="12" />
-    <Line x1="21" y1="12" x2="9" y2="12" />
-  </Svg>
-);
-
-/* ================= SCREEN ================= */
-import { Ionicons } from '@expo/vector-icons';
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -63,6 +38,7 @@ export default function AccountScreen() {
     courses: 0,
     completed: 0,
     learningTime: '0h',
+    profileImage: null as string | null,
   });
   const [loading, setLoading] = useState(false);
 
@@ -110,8 +86,9 @@ export default function AccountScreen() {
       if (!userId) return;
 
       // 2. Parallel Fetch
+      // 2. Parallel Fetch
       const [userRes, enrollRes] = await Promise.all([
-        supabase.from('users').select('id, full_name, email').eq('id', userId).single(),
+        supabase.from('users').select('id, full_name, email, profile_image_url').eq('id', userId).single(),
         supabase.from('user_course_enrollments').select('completed').eq('user_id', userId).eq('enrolled', true)
       ]);
 
@@ -129,6 +106,7 @@ export default function AccountScreen() {
         courses: total,
         completed,
         learningTime: `${total * 4}h`,
+        profileImage: dbUser.profile_image_url,
       });
       setEditName(dbUser.full_name || '');
     } catch (e) {
@@ -152,7 +130,7 @@ export default function AccountScreen() {
 
       setUser(prev => ({ ...prev, name: editName }));
 
-      // Update local storage too so other screens might pick it up if they read from it
+      // Update local storage
       const storedUser = await AsyncStorage.getItem('user');
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
@@ -163,6 +141,47 @@ export default function AccountScreen() {
       Alert.alert("Success", "Profile updated successfully");
     } catch (err: any) {
       Alert.alert("Error", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        setLoading(true);
+        // We'll treat the base64 string as a "temporary url" for storage in the text column
+        // In production, you'd upload file to Supabase Storage and get a public URL
+        const imageUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+
+        const { error } = await supabase
+          .from('users')
+          .update({ profile_image_url: imageUri })
+          .eq('id', user.id);
+
+        if (error) throw error;
+
+        setUser(prev => ({ ...prev, profileImage: imageUri }));
+
+        // Update local storage so FooterNav picks it up
+        const storedUser = await AsyncStorage.getItem('user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          await AsyncStorage.setItem('user', JSON.stringify({ ...parsed, profileImage: imageUri }));
+        }
+
+        Alert.alert("Success", "Profile photo updated!");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", "Failed to pick image: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -180,6 +199,28 @@ export default function AccountScreen() {
     await AsyncStorage.setItem('appTheme', thm);
     setActiveModal(null);
     // In a real app, use a Context to toggle styles
+  };
+
+  const handleShareApp = async () => {
+    try {
+      const result = await Share.share({
+        message: 'Check out Vidhi Gyan Shodh, the best app for legal education! https://vidhigyanShodh.com',
+        url: 'https://vidhigyanShodh.com', // iOS only
+        title: 'Share Vidhi Gyan Shodh' // Android only
+      });
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // shared with activity type of result.activityType
+        } else {
+          // shared
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // dismissed
+      }
+    } catch (error: any) {
+      Alert.alert(error.message);
+    }
   };
 
   const handleLogout = () => {
@@ -201,91 +242,85 @@ export default function AccountScreen() {
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* HEADER */}
-      <View style={styles.headerWrapper}>
-        <HomeHeader userName={user.name} />
+      {/* REUSABLE HEADER */}
+      <View style={{ zIndex: 100 }}>
+        <HomeHeader />
       </View>
 
-      {/* CONTENT */}
-      <View style={styles.mainContent}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 140 }}
-        >
-          {/* PROFILE */}
-          <View style={styles.profileSection}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* PROFILE INFO */}
+        <View style={styles.profileSection}>
+          <TouchableOpacity onPress={handlePickImage} style={{ position: 'relative' }}>
             <Image
               source={{
-                uri: `https://ui-avatars.com/api/?name=${user.name}&background=D4AF37&color=fff`,
+                uri: user.profileImage || `https://ui-avatars.com/api/?name=${user.name}&background=1E293B&color=fff&size=128`,
               }}
               style={styles.avatar}
             />
-            <View style={{ marginLeft: 16, flex: 1 }}>
-              <Text style={styles.userName}>{user.name}</Text>
-              <Text style={styles.userEmail}>{user.email}</Text>
+            <View style={styles.editBadge}>
+              <MaterialCommunityIcons name="camera" size={14} color="#FFF" />
             </View>
-          </View>
-
-          {/* STATS */}
-          <View style={styles.statsGrid}>
-            <Stat label="Courses" value={user.courses} />
-            <Stat label="Completed" value={user.completed} />
-            <Stat label="XP" value={user.learningTime} highlight />
-          </View>
-
-          {/* SETTINGS */}
-          <Text style={styles.groupTitle}>Settings</Text>
-          <View style={styles.card}>
-            <Menu
-              icon={<EditIcon />}
-              title="Edit Profile"
-              value={user.name}
-              onPress={() => setActiveModal('profile')}
-            />
-            <Menu
-              icon={<LangIcon />}
-              title="Language"
-              value={language}
-              onPress={() => setActiveModal('language')}
-            />
-            <Menu
-              icon={<ThemeIcon />}
-              title="Theme"
-              value={theme}
-              onPress={() => setActiveModal('theme')}
-            />
-          </View>
-
-          <Text style={styles.groupTitle}>Legal</Text>
-          <View style={styles.card}>
-            <Menu
-              icon={<Ionicons name="document-text-outline" size={20} color="#555" />}
-              title="Terms & Conditions"
-              onPress={() => setActiveModal('terms')}
-            />
-            <Menu
-              icon={<Ionicons name="shield-checkmark-outline" size={20} color="#555" />}
-              title="Privacy Policy"
-              onPress={() => setActiveModal('privacy')}
-            />
-          </View>
-
-          <Text style={styles.groupTitle}>Session</Text>
-          <View style={styles.card}>
-            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-              <LogoutIcon />
-              <Text style={styles.logoutText}>Sign Out</Text>
+          </TouchableOpacity>
+          <View style={{ marginLeft: 16 }}>
+            <Text style={styles.userName}>{user.name}</Text>
+            <Text style={styles.userEmail}>{user.email}</Text>
+            <TouchableOpacity onPress={() => setActiveModal('profile')}>
+              <Text style={styles.editLink}>Edit Profile</Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-          <Text style={styles.version}>Vidhi Gyan Sodh v1.0.5</Text>
-        </ScrollView>
-      </View>
+        {/* LEARNING STATS */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{user.courses}</Text>
+            <Text style={styles.statLabel}>Enrolled</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{user.completed}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{user.learningTime}</Text>
+            <Text style={styles.statLabel}>Hours</Text>
+          </View>
+        </View>
 
-      {/* FOOTER FIXED */}
-      <View style={styles.footerWrapper}>
-        <FooterNav />
-      </View>
+        {/* SETTINGS GROUP */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Account Settings</Text>
+        </View>
+        <View style={styles.menuGroup}>
+          <Menu icon={<EditIcon />} title="Personal Information" onPress={() => setActiveModal('profile')} />
+          <Menu icon={<LangIcon />} title="Language Preference" value={language} onPress={() => setActiveModal('language')} />
+          <Menu icon={<ThemeIcon />} title="App Theme" value={theme} onPress={() => setActiveModal('theme')} last />
+        </View>
+
+        {/* SUPPORT GROUP */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Support & About</Text>
+        </View>
+        <View style={styles.menuGroup}>
+          <Menu icon={<ShareIcon />} title="Share App" onPress={handleShareApp} />
+          <Menu icon={<SupportIcon />} title="Terms & Conditions" onPress={() => setActiveModal('terms')} />
+          <Menu icon={<MaterialCommunityIcons name="shield-check-outline" size={24} color="#64748B" />} title="Privacy Policy" onPress={() => setActiveModal('privacy')} last />
+        </View>
+
+        {/* LOGOUT */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutLabel}>Log Out</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.versionText}>v1.0.5 • Vidhi Gyan Shodh</Text>
+      </ScrollView>
+
+      <FooterNav />
+
 
       {/* ================= MODALS ================= */}
 
@@ -365,7 +400,7 @@ export default function AccountScreen() {
             <ScrollView style={{ marginTop: 10 }}>
               <Text style={styles.legalText}>
                 {activeModal === 'terms'
-                  ? "Welcome to Vidhi Gyan Sodh. By using our app, you agree to the following terms...\n\n1. Content: All legal courses are for educational purposes.\n2. Usage: You may not redistribute videos.\n\n(This is a placeholder for the full legal text.)"
+                  ? "Welcome to Vidhi Gyan Shodh. By using our app, you agree to the following terms...\n\n1. Content: All legal courses are for educational purposes.\n2. Usage: You may not redistribute videos.\n\n(This is a placeholder for the full legal text.)"
                   : "We respect your privacy. This policy explains how we handle your data...\n\n1. Data Collection: We collect only what is needed for your learning progress.\n2. Security: Your data is encrypted.\n\n(This is a placeholder for the full privacy policy.)"}
               </Text>
             </ScrollView>
@@ -381,142 +416,127 @@ export default function AccountScreen() {
 }
 
 /* ================= SMALL COMPONENTS ================= */
-const Stat = ({ label, value, highlight = false }: any) => (
-  <View style={styles.statBox}>
-    <Text style={[styles.statValue, highlight && { color: '#B8860B' }]}>
-      {value}
-    </Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
-
-const Menu = ({ icon, title, value, onPress }: any) => (
-  <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+const Menu = ({ icon, title, value, onPress, last }: any) => (
+  <TouchableOpacity
+    style={[styles.menuRow, last && { borderBottomWidth: 0 }]}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
     <View style={styles.menuLeft}>
-      <View style={styles.iconWrap}>{icon}</View>
-      <View>
-        <Text style={styles.menuTitle}>{title}</Text>
-        {value && <Text style={styles.menuValue}>{value}</Text>}
-      </View>
+      {icon}
+      <Text style={styles.menuText}>{title}</Text>
     </View>
-    <Text style={styles.menuArrow}>›</Text>
+    <View style={styles.menuRight}>
+      {value && <Text style={styles.menuValueText}>{value}</Text>}
+      <MaterialCommunityIcons name="chevron-right" size={20} color="#CBD5E1" />
+    </View>
   </TouchableOpacity>
 );
 
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA', paddingBottom: 70 },
-  headerWrapper: { height: 180 },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
 
-  mainContent: {
-    flex: 1,
-    marginTop: -30,
-    borderTopLeftRadius: 35,
-    borderTopRightRadius: 35,
-    backgroundColor: '#F8F9FA',
+  scrollContent: { paddingBottom: 100, paddingTop: 10 },
+
+  profileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 20,
+    marginTop: 10,
   },
+  avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#E2E8F0', borderWidth: 2, borderColor: '#FFF' },
+  editBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#D4AF37', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  userName: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 2 },
+  userEmail: { fontSize: 13, color: '#64748B', marginBottom: 6 },
+  editLink: { fontSize: 13, fontWeight: '700', color: '#D4AF37' },
 
-  profileSection: { flexDirection: 'row', padding: 24, alignItems: 'center' },
-  avatar: { width: 85, height: 85, borderRadius: 42.5, borderWidth: 3, borderColor: '#FFF' },
-  userName: { fontSize: 22, fontWeight: '800', color: '#1E293B' },
-  userEmail: { fontSize: 14, color: '#94A3B8' },
-  editIconBtn: { backgroundColor: '#FFF', padding: 10, borderRadius: 20, elevation: 2 },
-
-  statsGrid: {
+  statsContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
     marginHorizontal: 20,
-    borderRadius: 25,
-    paddingVertical: 22,
-    elevation: 4,
-    marginBottom: 20,
-  },
-  statBox: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 22, fontWeight: '800' },
-  statLabel: { fontSize: 12, color: '#999', marginTop: 4 },
-
-  groupTitle: {
-    marginLeft: 28,
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 1.2,
-    marginBottom: 10,
     marginTop: 20,
+    borderRadius: 12,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
   },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNumber: { fontSize: 18, fontWeight: '900', color: '#1E293B', marginBottom: 2 },
+  statLabel: { fontSize: 12, color: '#64748B', fontWeight: '500' },
+  statDivider: { width: 1, height: '60%', backgroundColor: '#E2E8F0', alignSelf: 'center' },
 
-  card: {
+  sectionHeader: { paddingHorizontal: 24, marginTop: 28, marginBottom: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: '800', color: '#334155', letterSpacing: 0.5 },
+
+  menuGroup: {
     backgroundColor: '#FFF',
     marginHorizontal: 20,
-    borderRadius: 25,
-    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
   },
-
-  menuItem: {
+  menuRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
+    borderBottomColor: '#F1F5F9',
   },
   menuLeft: { flexDirection: 'row', alignItems: 'center' },
-  iconWrap: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#FBFBFB',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  menuTitle: { fontSize: 16, fontWeight: '700', color: '#1E293B' },
-  menuValue: { fontSize: 12, color: '#D4AF37', marginTop: 2, fontWeight: '600' },
-  menuArrow: { fontSize: 24, color: '#EEE' },
+  menuText: { marginLeft: 14, fontSize: 15, fontWeight: '600', color: '#1E293B' },
+  menuRight: { flexDirection: 'row', alignItems: 'center' },
+  menuValueText: { fontSize: 13, color: '#94A3B8', marginRight: 8 },
 
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20 },
-  logoutText: { marginLeft: 14, fontSize: 17, fontWeight: '800', color: '#FF4D4D' },
-
-  footerWrapper: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
+  logoutButton: {
+    marginTop: 30,
+    marginHorizontal: 20,
     backgroundColor: '#FFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EEE',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
   },
+  logoutLabel: { fontSize: 15, fontWeight: '800', color: '#EF4444' },
 
-  version: {
+  versionText: {
     textAlign: 'center',
-    color: '#DDD',
-    fontSize: 12,
-    marginVertical: 40,
+    color: '#CBD5E1',
+    fontSize: 11,
+    marginTop: 24,
+    marginBottom: 20,
   },
 
-  /* MODAL STYLES */
+  /* MODAL STYLES (Keep existing functional styles, updated visually) */
   modalOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center', alignItems: 'center',
     zIndex: 1000,
   },
   modalCard: {
-    backgroundColor: '#FFF', width: '85%', borderRadius: 24, padding: 24,
-    elevation: 10,
+    backgroundColor: '#FFF', width: '85%', borderRadius: 20, padding: 24,
+    elevation: 20,
   },
-  modalTitle: { fontSize: 20, fontWeight: '800', marginBottom: 20, textAlign: 'center' },
+  modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 20, textAlign: 'center', color: '#1E293B' },
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 8 },
   textInput: {
-    backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
-    fontSize: 16, fontWeight: '600', color: '#334155', marginBottom: 24
+    backgroundColor: '#F8FAFC', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12,
+    fontSize: 15, fontWeight: '600', color: '#334155', marginBottom: 24,
+    borderWidth: 1, borderColor: '#E2E8F0'
   },
   modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
   modalBtnCancel: { paddingVertical: 12, paddingHorizontal: 20 },
   modalBtnTextCancel: { color: '#64748B', fontWeight: '700' },
   modalBtnSave: {
-    backgroundColor: '#D4AF37', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12,
+    backgroundColor: '#D4AF37', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8,
     minWidth: 100, alignItems: 'center'
   },
   modalBtnTextSave: { color: '#FFF', fontWeight: '800' },
@@ -525,11 +545,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9'
   },
-  optionSelected: { backgroundColor: '#FDFBEF', marginHorizontal: -10, paddingHorizontal: 10, borderRadius: 8 },
-  optionText: { fontSize: 16, fontWeight: '600', color: '#475569' },
+  optionSelected: { backgroundColor: '#FFFDF5' },
+  optionText: { fontSize: 15, fontWeight: '600', color: '#475569' },
   optionTextSelected: { color: '#D4AF37', fontWeight: '800' },
   modalCloseLink: { alignItems: 'center', marginTop: 20 },
   modalCloseText: { color: '#94A3B8', fontWeight: '700' },
-
-  legalText: { color: '#444', lineHeight: 22, fontSize: 14 },
+  legalText: { color: '#475569', lineHeight: 22, fontSize: 14 },
 });

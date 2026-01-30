@@ -1,7 +1,6 @@
 // app/components/Header.tsx
 import { Palette } from '@/constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 interface HeaderProps {
@@ -9,9 +8,9 @@ interface HeaderProps {
   subtitle?: string;
 }
 
-export default function Header({ 
-  title = 'Vidhi Gyan Sodh', 
-  subtitle = 'Continue learning' 
+export default function Header({
+  title = 'Vidhi Gyan Shodh',
+  subtitle = 'Continue learning'
 }: HeaderProps) {
   return (
     <LinearGradient

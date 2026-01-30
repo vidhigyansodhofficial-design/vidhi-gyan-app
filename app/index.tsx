@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Image,
   Platform,
@@ -91,7 +91,7 @@ export default function OnboardingScreen() {
             </View>
 
             {/* Typography */}
-            <Text style={styles.brandSubtitle}>VIDHI GYAN SODH</Text>
+            <Text style={styles.brandSubtitle}>VIDHI GYAN SHODH</Text>
             <Text style={styles.title}>{slides[currentIndex].title}</Text>
             <Text style={styles.description}>
               {slides[currentIndex].description}

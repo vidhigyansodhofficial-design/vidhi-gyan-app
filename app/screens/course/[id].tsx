@@ -1,19 +1,24 @@
+import { useHaptics } from '@/hooks/useHaptics';
 import { supabase } from '@/lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as NavigationBar from 'expo-navigation-bar';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Dimensions,
+  Image,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -21,7 +26,7 @@ import { WebView } from 'react-native-webview';
 
 const { width } = Dimensions.get('window');
 
-type TabType = 'Overview' | 'Syllabus' | 'Reviews';
+type TabType = 'Overview' | 'Syllabus' | 'Discussion' | 'Reviews';
 
 export default function CourseDetailScreen() {
   const router = useRouter();
@@ -39,45 +44,131 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false); // New loading state for enroll button
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [posting, setPosting] = useState(false);
+  const { triggerHaptic } = useHaptics();
+
+  /* ---------------- SECURITY STATE ---------------- */
+  const webViewRef = useRef<WebView>(null);
+  const [suspiciousCount, setSuspiciousCount] = useState(0);
+  const [showSecurityWarning, setShowSecurityWarning] = useState(false);
+  const [securityViolation, setSecurityViolation] = useState<string>('');
 
   /* ---------------- IMMERSIVE MODE & SECURITY ---------------- */
+
+  // Helper: Log Security Event
+  const logSecurityEvent = async (event: string) => {
+    if (!userId || !courseId) return;
+    // Don't await strictly to avoid blocking UI
+    supabase.from('security_logs').insert({
+      user_id: userId,
+      course_id: courseId,
+      event: event,
+      details: { timestamp: new Date().toISOString(), violation_count: suspiciousCount + 1 }
+    }).then(({ error }) => {
+      if (error) console.warn("Security log error:", error);
+    });
+  };
+
+  // Helper: Handle Suspicious Activity
+  const handleSuspiciousActivity = (reason: string) => {
+    triggerHaptic('error'); // Warn user physically
+    // 1. Pause Video (Best Effort)
+    const pauseScript = `
+      (function() {
+        try {
+          var videos = document.querySelectorAll('video');
+          videos.forEach(function(v) { v.pause(); });
+          var iframes = document.querySelectorAll('iframe');
+          iframes.forEach(function(f) { 
+            f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo' }), '*');
+          });
+        } catch(e) {}
+      })();
+      true;
+    `;
+    webViewRef.current?.injectJavaScript(pauseScript);
+
+    // 2. Update State
+    setSecurityViolation(reason);
+    setShowSecurityWarning(true);
+    setSuspiciousCount(prev => prev + 1);
+
+    // 3. Log
+    logSecurityEvent(reason);
+  };
+
+  // 1. App Background / Focus Loss Detection
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState.match(/inactive|background/)) {
+        handleSuspiciousActivity('APP_BACKGROUND_FOCUS_LOST');
+        setIsScreenBlocked(true); // Temporarily block screen content visually
+      } else if (nextAppState === 'active') {
+        // Optional: Auto-resume or keep blocked until user dismisses warning?
+        // We'll keep the warning up if it was triggered.
+        // But we can unblock the "isScreenBlocked" black screen if we rely on the warning overlay.
+        // Let's keep isScreenBlocked false here to let the warning overlay show on top.
+        setIsScreenBlocked(false);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [userId, courseId]);
+
+  // 2. Immersive Mode (Refined for Smoothness)
   useFocusEffect(
     useCallback(() => {
-      const hideSystemBars = async () => {
+      const enterFullScreen = async () => {
         try {
           if (Platform.OS === 'android') {
+            // Set absolute positioning to prevent layout jumps (smoothness)
+            await NavigationBar.setPositionAsync("absolute");
+            await NavigationBar.setBackgroundColorAsync("#00000000"); // Transparent
             await NavigationBar.setVisibilityAsync("hidden");
             await NavigationBar.setBehaviorAsync("sticky-immersive");
           }
+          // iOS & Android Status Bar
           StatusBar.setHidden(true, 'fade');
         } catch (error) {
-          console.warn("System bar error:", error);
+          console.warn("Enter full screen error:", error);
         }
       };
-      hideSystemBars();
-      return () => {
-        const showSystemBars = async () => {
-          try {
-            if (Platform.OS === 'android') {
-              await NavigationBar.setVisibilityAsync("visible");
-            }
-            StatusBar.setHidden(false, 'fade');
-          } catch (error) {
-            console.warn("System bar restore error:", error);
+
+      const exitFullScreen = async () => {
+        try {
+          if (Platform.OS === 'android') {
+            await NavigationBar.setVisibilityAsync("visible");
+            await NavigationBar.setPositionAsync("relative");
+            await NavigationBar.setBackgroundColorAsync("#000000"); // Restore to black or theme color
           }
-        };
-        showSystemBars();
+          StatusBar.setHidden(false, 'fade');
+        } catch (error) {
+          console.warn("Exit full screen error:", error);
+        }
+      };
+
+      enterFullScreen();
+
+      return () => {
+        exitFullScreen();
       };
     }, [])
   );
 
+  // 3. Screenshot Detection
   useFocusEffect(
     useCallback(() => {
       let subscription: ScreenCapture.Subscription | null = null;
       const secureScreen = async () => {
         try {
           await ScreenCapture.preventScreenCaptureAsync();
-          subscription = ScreenCapture.addScreenshotListener(() => setIsScreenBlocked(true));
+          subscription = ScreenCapture.addScreenshotListener(() => {
+            handleSuspiciousActivity('SCREENSHOT_ATTEMPT');
+          });
         } catch (err) {
           console.warn("Screen security error:", err);
         }
@@ -86,9 +177,8 @@ export default function CourseDetailScreen() {
       return () => {
         ScreenCapture.allowScreenCaptureAsync();
         subscription?.remove();
-        setIsScreenBlocked(false);
       };
-    }, [])
+    }, [userId, courseId])
   );
 
   /* ---------------- DYNAMIC DATA ---------------- */
@@ -112,7 +202,10 @@ export default function CourseDetailScreen() {
   }, [syllabus]);
 
   useEffect(() => {
-    if (courseId) loadAll();
+    if (courseId) {
+      loadAll();
+      fetchComments();
+    }
   }, [courseId]);
 
   const loadAll = async () => {
@@ -174,8 +267,56 @@ export default function CourseDetailScreen() {
     }
   };
 
+  const fetchComments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('course_comments')
+        .select(`
+          id, content, created_at,
+          users (id, full_name, email)
+        `)
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+
+      if (error) console.warn("Comments error:", error);
+      else setComments(data || []);
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  const handlePostComment = async () => {
+    if (!newComment.trim()) return;
+    if (!userId) {
+      Alert.alert("Please login", "You need to be logged in to comment.");
+      return;
+    }
+    triggerHaptic('selection');
+    setPosting(true);
+    try {
+      const { error } = await supabase.from('course_comments').insert({
+        course_id: courseId,
+        user_id: userId,
+        content: newComment.trim(),
+      });
+
+      if (error) throw error;
+
+      setNewComment('');
+      triggerHaptic('success');
+      fetchComments(); // Refresh list
+    } catch (err: any) {
+      triggerHaptic('error');
+      console.error("Post comment error:", err);
+      Alert.alert("Error", err.message || "Failed to post comment.");
+    } finally {
+      setPosting(false);
+    }
+  };
+
   /* ---------------- ACTION LOGIC ---------------- */
   const handleEnroll = async () => {
+    triggerHaptic('medium');
     if (!userId || !courseId) return;
     setEnrolling(true);
     try {
@@ -188,8 +329,10 @@ export default function CourseDetailScreen() {
       if (error) throw error;
 
       setIsEnrolled(true);
+      triggerHaptic('success');
       Alert.alert("Success", "Welcome to the course!");
     } catch (err: any) {
+      triggerHaptic('error');
       Alert.alert("Enrollment Failed", err.message);
     } finally {
       setEnrolling(false);
@@ -198,6 +341,7 @@ export default function CourseDetailScreen() {
 
   const markCompleted = async (sId: string) => {
     if (!userId) return;
+    triggerHaptic('light');
 
     // 1. Optimistic Update Local State
     const wasAlreadyCompleted = progressMap[sId];
@@ -242,11 +386,13 @@ export default function CourseDetailScreen() {
       if (enrollmentError) throw enrollmentError;
 
       if (isCompleted) {
+        triggerHaptic('success');
         Alert.alert("Course Completed!", "Congratulations! You have finished this course.");
       }
 
     } catch (err: any) {
       console.error("Progress Update Failed:", err);
+      triggerHaptic('warning');
       Alert.alert("Error", "Failed to save progress.");
       // Revert local state if needed, but keeping it simple for now
     }
@@ -258,11 +404,11 @@ export default function CourseDetailScreen() {
     );
   }
 
-  if (isScreenBlocked) {
+  if (isScreenBlocked && !showSecurityWarning) {
     return (
       <View style={styles.blockedContainer}>
         <MaterialCommunityIcons name="shield-lock" size={60} color="#D4AF37" />
-        <Text style={styles.blockedText}>SCREEN RECORDING BLOCKED</Text>
+        <Text style={styles.blockedText}>SECURE ENVIRONMENT ACTIVE</Text>
       </View>
     );
   }
@@ -289,6 +435,7 @@ export default function CourseDetailScreen() {
         {isEnrolled ? (
           activeVideo ? (
             <WebView
+              ref={webViewRef}
               source={{ uri: activeVideo }}
               style={{ flex: 1, backgroundColor: '#000' }}
               allowsFullscreenVideo
@@ -325,7 +472,7 @@ export default function CourseDetailScreen() {
             </TouchableOpacity>
           </View>
         )}
-        <TouchableOpacity style={styles.videoBackButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.videoBackButton} onPress={() => { triggerHaptic('light'); router.back(); }}>
           <MaterialCommunityIcons name="chevron-left" size={28} color="#FFF" />
         </TouchableOpacity>
       </View>
@@ -345,10 +492,10 @@ export default function CourseDetailScreen() {
       {/* 4. TABS & PROGRESS */}
       <View style={styles.tabArea}>
         <View style={styles.tabBar}>
-          {(['Overview', 'Syllabus', 'Reviews'] as TabType[]).map((tab) => (
+          {(['Overview', 'Syllabus', 'Discussion', 'Reviews'] as TabType[]).map((tab) => (
             <TouchableOpacity
               key={tab}
-              onPress={() => setActiveTab(tab)}
+              onPress={() => { triggerHaptic('selection'); setActiveTab(tab); }}
               style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
             >
               <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
@@ -388,10 +535,12 @@ export default function CourseDetailScreen() {
                   !isEnrolled && !item.preview && { opacity: 0.6 }
                 ]}
                 onPress={() => {
+                  triggerHaptic('selection');
                   if (isEnrolled || item.preview) {
                     setActiveSyllabusId(item.id);
                     setActiveVideo(item.video_url);
                   } else {
+                    triggerHaptic('warning');
                     Alert.alert("Locked", "Please enroll to view this module.");
                   }
                 }}
@@ -426,12 +575,83 @@ export default function CourseDetailScreen() {
           </View>
         )}
 
+        {activeTab === 'Discussion' && (
+          <View style={styles.contentPadding}>
+            <Text style={styles.sectionTitle}>Discussion ({comments.length})</Text>
+
+            {/* COMMENT INPUT */}
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.commentInputBox}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Ask a question or share thoughts..."
+                placeholderTextColor="#94A3B8"
+                value={newComment}
+                onChangeText={setNewComment}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.postBtn, !newComment.trim() && { opacity: 0.5 }]}
+                disabled={!newComment.trim() || posting}
+                onPress={handlePostComment}
+              >
+                {posting ? <ActivityIndicator size="small" color="#FFF" /> : <MaterialCommunityIcons name="send" size={20} color="#FFF" />}
+              </TouchableOpacity>
+            </KeyboardAvoidingView>
+
+            {/* COMMENTS LIST */}
+            <View style={{ marginTop: 20 }}>
+              {comments.map((c) => (
+                <View key={c.id} style={styles.commentItem}>
+                  <Image
+                    source={{ uri: `https://ui-avatars.com/api/?name=${c.users?.full_name || 'User'}&background=F1F5F9&color=64748B` }}
+                    style={styles.commentAvatar}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={styles.commentUser}>{c.users?.full_name || 'Student'}</Text>
+                      <Text style={styles.commentDate}>{new Date(c.created_at).toLocaleDateString()}</Text>
+                    </View>
+                    <Text style={styles.commentText}>{c.content}</Text>
+                  </View>
+                </View>
+              ))}
+              {comments.length === 0 && (
+                <Text style={styles.emptyComments}>No comments yet. Be the first to start a conversation!</Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {activeTab === 'Reviews' && (
           <View style={styles.contentPadding}>
-            <Text style={styles.bodyText}>Verified feedback from the legal community.</Text>
+            <Text style={styles.bodyText}>Verified feedback from the legal community. (Coming Soon)</Text>
           </View>
         )}
       </ScrollView>
+
+      {/* SECURITY WARNING OVERLAY */}
+      {showSecurityWarning && (
+        <View style={styles.securityOverlay}>
+          <View style={styles.securityBox}>
+            <MaterialCommunityIcons name="alert-decagram" size={50} color="#EF4444" />
+            <Text style={styles.securityTitle}>Security Alert</Text>
+            <Text style={styles.securityText}>
+              {securityViolation === 'SCREENSHOT_ATTEMPT'
+                ? "Screenshots are protected content."
+                : "App backgrounding is restricted during playback."}
+            </Text>
+            <Text style={styles.securitySubText}>
+              This incident has been logged. ({suspiciousCount})
+            </Text>
+            <TouchableOpacity
+              style={styles.resumeBtn}
+              onPress={() => { triggerHaptic('medium'); setShowSecurityWarning(false); }}
+            >
+              <Text style={styles.resumeBtnText}>I UNDERSTAND, RESUME</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -439,8 +659,16 @@ export default function CourseDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  blockedContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  blockedContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
   blockedText: { color: '#D4AF37', marginTop: 16, fontWeight: '900', letterSpacing: 1.2 },
+
+  securityOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+  securityBox: { width: '80%', backgroundColor: '#1E293B', padding: 24, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#EF4444' },
+  securityTitle: { fontSize: 20, fontWeight: '900', color: '#FFF', marginVertical: 12 },
+  securityText: { color: '#CBD5E1', textAlign: 'center', marginBottom: 8, fontSize: 14 },
+  securitySubText: { color: '#64748B', fontSize: 12, marginBottom: 20 },
+  resumeBtn: { backgroundColor: '#EF4444', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, width: '100%', alignItems: 'center' },
+  resumeBtnText: { color: '#FFF', fontWeight: '900', fontSize: 13 },
 
   premiumTopBar: { backgroundColor: '#D4AF37', paddingTop: Platform.OS === 'ios' ? 55 : 18, paddingBottom: 15, elevation: 4 },
   headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
@@ -492,4 +720,14 @@ const styles = StyleSheet.create({
   previewTag: { fontSize: 10, fontWeight: '900', color: '#D4AF37', backgroundColor: '#FFFDF0', padding: 4, borderRadius: 4 },
   doneBtn: { backgroundColor: '#1E293B', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
   doneBtnText: { color: '#FFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-});
+
+  commentInputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FA', borderRadius: 12, padding: 8, borderWidth: 1, borderColor: '#EFF6FF' },
+  commentInput: { flex: 1, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#334155', maxHeight: 80 },
+  postBtn: { backgroundColor: '#D4AF37', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+  commentItem: { flexDirection: 'row', marginBottom: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: 16 },
+  commentAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+  commentUser: { fontSize: 13, fontWeight: '700', color: '#1E293B' },
+  commentDate: { fontSize: 11, color: '#94A3B8' },
+  commentText: { fontSize: 14, color: '#475569', marginTop: 4, lineHeight: 20 },
+  emptyComments: { textAlign: 'center', color: '#94A3B8', marginTop: 20, fontStyle: 'italic' },
+}); 

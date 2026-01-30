@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
-      "package": "com.vidhigyansodh.vidhigyan"
+      "package": "com.vidhigyanShodh.vidhigyan"
     },
     "web": {
       "output": "static",

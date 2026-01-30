@@ -1,7 +1,7 @@
 // app/components/SafeScreen.tsx
 
 import React from 'react';
-import { SafeAreaView, ViewStyle } from 'react-native';
+import { View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface SafeScreenProps {
@@ -13,7 +13,7 @@ export default function SafeScreen({ children, style }: SafeScreenProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView
+    <View
       style={[
         {
           flex: 1,
@@ -25,6 +25,6 @@ export default function SafeScreen({ children, style }: SafeScreenProps) {
       ]}
     >
       {children}
-    </SafeAreaView>
+    </View>
   );
 }

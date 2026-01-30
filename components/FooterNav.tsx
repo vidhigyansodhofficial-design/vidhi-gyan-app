@@ -1,8 +1,12 @@
 // app/components/FooterNav.tsx
 import { Palette } from '@/constants/theme';
+import { useHaptics } from '@/hooks/useHaptics';
+import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePathname, useRouter } from 'expo-router';
-import React from 'react';
+import { useEffect, useState } from 'react';
 import {
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -33,9 +37,35 @@ export default function FooterNav() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { triggerHaptic } = useHaptics();
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
   const primaryColor = Palette.yellow;
   const inactiveColor = Palette.textSecondary;
+
+  useEffect(() => {
+    loadUserImage();
+  }, [pathname]); // Reload when path changes (e.g. coming back from account screen)
+
+  const loadUserImage = async () => {
+    try {
+      const storedUser = await AsyncStorage.getItem('user');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        if (user.profileImage) {
+          setProfileImage(user.profileImage);
+          return;
+        }
+        // Optional: Fetch from DB if not in local storage but id is there
+        if (user.id) {
+          const { data } = await supabase.from('users').select('profile_image_url').eq('id', user.id).single();
+          if (data?.profile_image_url) {
+            setProfileImage(data.profile_image_url);
+          }
+        }
+      }
+    } catch (e) { }
+  };
 
   const navItems = [
     { name: 'Home', path: '/screens/home', icon: 'home' },
@@ -48,6 +78,7 @@ export default function FooterNav() {
   const bottomPadding = 12;
 
   const handlePress = (path: string) => {
+    triggerHaptic('selection'); // Haptic for tab switching
     if (pathname !== path) {
       // Use replace to avoid stacking navigation history on tab switches
       router.replace(path as any);
@@ -67,7 +98,17 @@ export default function FooterNav() {
             activeOpacity={0.7}
             onPress={() => handlePress(item.path)}
           >
-            <BootstrapIcon name={item.icon} color={color} size={24} />
+            {item.name === 'Account' && profileImage ? (
+              <Image
+                source={{ uri: profileImage }}
+                style={[
+                  styles.profileImage,
+                  { borderColor: isActive ? primaryColor : 'transparent', borderWidth: 2 }
+                ]}
+              />
+            ) : (
+              <BootstrapIcon name={item.icon} color={color} size={24} />
+            )}
             <Text
               style={[
                 styles.label,
@@ -123,5 +164,10 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: Palette.yellow,
+  },
+  profileImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   }
 });

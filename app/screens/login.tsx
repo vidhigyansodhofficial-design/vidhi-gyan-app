@@ -1,6 +1,9 @@
+import { supabase } from "@/lib/supabase"; // ✅ IMPORT SUPABASE
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,10 +18,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
-
-import { supabase } from "@/lib/supabase"; // ✅ IMPORT SUPABASE
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -129,227 +130,303 @@ export default function AuthScreen() {
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar barStyle="light-content" hidden={false} translucent={true} backgroundColor="transparent" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
       <ImageBackground
         source={require("../../assets/images/law-background.jpg")}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        <View style={styles.darkOverlay} />
-
-        <SafeAreaView style={styles.safeArea}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.keyboardAvoid}
-          >
-            <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+        <LinearGradient
+          colors={["rgba(255,255,255,0.4)", "rgba(255,255,255,0.7)", "rgba(255,255,255,0.95)"]}
+          style={styles.gradientOverlay}
+        >
+          <SafeAreaView style={styles.safeArea}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={styles.keyboardAvoid}
             >
-              {/* HEADER */}
-              <View style={styles.headerArea}>
-                <Image
-                  source={require("../../assets/images/pngtree-law.png")}
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
-                <Text style={styles.brandName}>Vidhi Gyan Sodh</Text>
-                <View style={styles.goldLine} />
-                <Text style={styles.brandTagline}>MASTER INDIAN LAW</Text>
-              </View>
-
-              {/* FORM */}
-              <View style={styles.premiumSheet}>
-                <Text style={styles.sheetTitle}>
-                  {showOtpScreen ? "Verify Identity" : "Secure Login"}
-                </Text>
-
-                {!showOtpScreen ? (
-                  <View style={styles.form}>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>FULL NAME (optional)</Text>
-                      <TextInput
-                        style={styles.premiumInput}
-                        placeholder="e.g. Shubham Kumar"
-                        placeholderTextColor="#999"
-                        value={fullName}
-                        onChangeText={setFullName}
-                        autoCapitalize="words"
-                        returnKeyType="next"
-                        onSubmitEditing={() =>
-                          emailInputRef.current?.focus()
-                        }
+              <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                <View style={styles.staticContent}>
+                  {/* HEADER SECTION */}
+                  <View style={styles.headerArea}>
+                    <View style={styles.logoCircle}>
+                      <Image
+                        source={require("../../assets/images/pngtree-law.png")}
+                        style={styles.logo}
+                        resizeMode="contain"
                       />
                     </View>
-
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>EMAIL ADDRESS</Text>
-                      <TextInput
-                        ref={emailInputRef}
-                        style={styles.premiumInput}
-                        placeholder="name@example.com"
-                        placeholderTextColor="#999"
-                        value={email}
-                        onChangeText={setEmail}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                        returnKeyType="done"
-                        onSubmitEditing={handleSendOtp}
-                      />
-                    </View>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.goldenButton,
-                        isLoading && styles.buttonDisabled,
-                      ]}
-                      onPress={handleSendOtp}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator color="#FFF" />
-                      ) : (
-                        <Text style={styles.buttonText}>REQUEST OTP</Text>
-                      )}
-                    </TouchableOpacity>
+                    <Text style={styles.brandName}>VIDHI GYAN SHODH</Text>
+                    <Text style={styles.brandTagline}>EXCELLENCE IN LEGAL EDUCATION</Text>
                   </View>
-                ) : (
-                  <View style={styles.form}>
-                    <Text style={styles.otpMessage}>
-                      Enter the 6-digit code sent to{" "}
-                      <Text style={{ fontWeight: "bold" }}>{email}</Text>
+
+                  {/* FORM SECTION */}
+                  <View style={styles.formContainer}>
+                    <Text style={styles.welcomeText}>
+                      {showOtpScreen ? "Verify Access" : "Welcome Back"}
+                    </Text>
+                    <Text style={styles.subText}>
+                      {showOtpScreen
+                        ? `We sent a code to ${email}`
+                        : "Sign in to continue your learning journey"}
                     </Text>
 
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>OTP CODE</Text>
-                      <TextInput
-                        ref={otpInputRef}
-                        style={[styles.premiumInput, styles.otpInput]}
-                        placeholder="000000"
-                        placeholderTextColor="#CCC"
-                        value={otp}
-                        onChangeText={setOtp}
-                        keyboardType="numeric"
-                        maxLength={6}
-                      />
-                    </View>
+                    {!showOtpScreen ? (
+                      <View style={styles.form}>
+                        {/* Full Name Input */}
+                        <View style={styles.inputWrapper}>
+                          <MaterialCommunityIcons name="account-outline" size={20} color="#D4AF37" style={styles.inputIcon} />
+                          <TextInput
+                            style={styles.premiumInput}
+                            placeholder="Full Name"
+                            placeholderTextColor="#64748B"
+                            value={fullName}
+                            onChangeText={setFullName}
+                            autoCapitalize="words"
+                            returnKeyType="next"
+                            onSubmitEditing={() => emailInputRef.current?.focus()}
+                          />
+                        </View>
 
-                    {isLoading && (
-                      <ActivityIndicator
-                        color="#D4AF37"
-                        style={{ marginTop: 10 }}
-                      />
+                        {/* Email Input */}
+                        <View style={styles.inputWrapper}>
+                          <MaterialCommunityIcons name="email-outline" size={20} color="#D4AF37" style={styles.inputIcon} />
+                          <TextInput
+                            ref={emailInputRef}
+                            style={styles.premiumInput}
+                            placeholder="Email Address"
+                            placeholderTextColor="#64748B"
+                            value={email}
+                            onChangeText={setEmail}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                            returnKeyType="done"
+                            onSubmitEditing={handleSendOtp}
+                          />
+                        </View>
+
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={handleSendOtp}
+                          disabled={isLoading}
+                          style={{ marginTop: 10 }}
+                        >
+                          <LinearGradient
+                            colors={isLoading ? ["#4b5563", "#374151"] : ["#D4AF37", "#AA8C2C"]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.gradientButton}
+                          >
+                            {isLoading ? (
+                              <ActivityIndicator color="#FFF" />
+                            ) : (
+                              <Text style={styles.buttonText}>Get Login Code</Text>
+                            )}
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.form}>
+                        <View style={styles.otpContainer}>
+                          {/* OTP Input */}
+                          <TextInput
+                            ref={otpInputRef}
+                            style={styles.otpInput}
+                            placeholder="• • • • • •"
+                            placeholderTextColor="#555"
+                            value={otp}
+                            onChangeText={setOtp}
+                            keyboardType="numeric"
+                            maxLength={6}
+                          />
+                        </View>
+
+                        {isLoading && <ActivityIndicator color="#D4AF37" style={{ marginBottom: 10 }} />}
+
+                        <TouchableOpacity onPress={() => { setOtp(""); setShowOtpScreen(false); }}>
+                          <Text style={styles.changeEmailText}>Change Email Address</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
-
-                    <TouchableOpacity
-                      onPress={() => {
-                        setOtp("");
-                        setShowOtpScreen(false);
-                      }}
-                      style={styles.backButton}
-                    >
-                      <Text style={styles.backButtonText}>
-                        Use a different email
-                      </Text>
-                    </TouchableOpacity>
                   </View>
-                )}
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+
+                  {/* FOOTER TEXT */}
+                  <View style={styles.footerArea}>
+                    <Text style={styles.footerText}>By continuing, you agree to our Terms & Privacy Policy</Text>
+                  </View>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </SafeAreaView>
+        </LinearGradient>
       </ImageBackground>
     </View>
   );
 }
 
-/* ================= STYLES (UNCHANGED) ================= */
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
-  mainContainer: { flex: 1, backgroundColor: "#000" },
+  mainContainer: { flex: 1, backgroundColor: "#FFF" }, // Light Bg
   backgroundImage: { flex: 1 },
-  darkOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.65)",
-  },
+  gradientOverlay: { flex: 1 },
   safeArea: { flex: 1 },
   keyboardAvoid: { flex: 1 },
-  scrollContent: { flexGrow: 1, justifyContent: "space-between" },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "flex-start",
+    paddingBottom: 20
+  },
+  staticContent: {
+    paddingHorizontal: 24,
+    paddingTop: 100, // Fixed top padding
+  },
+
   headerArea: {
-    paddingTop: 40,
-    paddingBottom: 20,
     alignItems: "center",
+    marginBottom: 30, // Reduced slightly to keep form visible
   },
-  logo: { width: 80, height: 80, tintColor: "#D4AF37" },
+  logoCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#FFF", // White circle
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: "#D4AF37", // Gold border
+    shadowColor: "#D4AF37",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  logo: { width: 60, height: 60, tintColor: "#D4AF37" },
   brandName: {
-    fontSize: 34,
-    color: "#FFF",
-    fontFamily: Platform.OS === "ios" ? "Times New Roman" : "serif",
-  },
-  goldLine: {
-    width: 40,
-    height: 1.5,
-    backgroundColor: "#D4AF37",
-    marginVertical: 10,
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#1E293B", // Dark Text
+    letterSpacing: 2,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+    textAlign: 'center',
   },
   brandTagline: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.5)",
-    letterSpacing: 3,
-    fontWeight: "700",
-  },
-  premiumSheet: {
-    backgroundColor: "#FFF",
-    borderTopLeftRadius: 45,
-    borderTopRightRadius: 45,
-    padding: 35,
-    minHeight: 450,
-  },
-  sheetTitle: {
-    fontSize: 26,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 30,
-  },
-  form: { gap: 22 },
-  inputContainer: { gap: 8 },
-  inputLabel: {
     fontSize: 10,
-    fontWeight: "800",
-    color: "#A1A1A1",
-    letterSpacing: 1.2,
+    color: "#B45309", // Darker gold/orange for readability on white
+    letterSpacing: 4,
+    fontWeight: "700",
+    marginTop: 8,
+    textTransform: 'uppercase',
   },
-  premiumInput: {
-    backgroundColor: "#F9F9F9",
-    borderRadius: 15,
-    padding: 16,
-    fontSize: 16,
+
+  formContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 30,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    // Neumorphism / Soft Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: "#F0F0F0",
+    borderColor: "#F1F5F9",
+  },
+  welcomeText: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#1E293B", // Dark Text
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  subText: {
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    marginBottom: 28,
+  },
+
+  form: { gap: 16 },
+
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC", // Light Gray Input
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    height: 60,
+    paddingHorizontal: 16,
+  },
+  inputIcon: { marginRight: 14, opacity: 0.8 },
+  premiumInput: {
+    flex: 1,
+    color: "#1E293B", // Dark Input Text
+    fontSize: 16,
+    height: '100%',
+    fontWeight: '500',
+  },
+
+  /* OTP Specific */
+  otpContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
   },
   otpInput: {
-    textAlign: "center",
-    fontSize: 28,
-    letterSpacing: 10,
-    fontWeight: "700",
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#D4AF37",
     color: "#D4AF37",
-  },
-  otpMessage: { textAlign: "center", color: "#555" },
-  goldenButton: {
-    backgroundColor: "#D4AF37",
-    borderRadius: 15,
-    paddingVertical: 18,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: {
-    fontSize: 15,
+    fontSize: 32,
     fontWeight: "800",
-    color: "#FFF",
-    letterSpacing: 1.5,
+    letterSpacing: 12,
+    textAlign: "center",
+    width: '100%',
+    paddingVertical: 14,
   },
-  backButton: { alignSelf: "center", marginTop: 15 },
-  backButtonText: { color: "#999", fontSize: 13 },
+
+  /* Button */
+  gradientButton: {
+    height: 60,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#D4AF37",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+    marginTop: 10,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFF", // White text on Gold Button
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+  buttonDisabled: { opacity: 0.7 },
+
+  changeEmailText: {
+    color: "#94A3B8",
+    textAlign: "center",
+    fontSize: 14,
+    marginTop: 20,
+    textDecorationLine: 'underline',
+  },
+
+  footerArea: {
+    marginTop: 30,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: "#94A3B8",
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 16,
+  }
 });
