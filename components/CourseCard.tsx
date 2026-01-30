@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function CourseCard({ course, progressPercent, onPress }: any) {
   const isEnrolled = typeof progressPercent === 'number';
@@ -9,7 +9,7 @@ export default function CourseCard({ course, progressPercent, onPress }: any) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
       <Image source={{ uri: course.image }} style={styles.image} />
-      
+
       <View style={styles.content}>
         <View style={styles.headerRow}>
           <Text style={styles.category}>{course.category}</Text>
@@ -24,7 +24,10 @@ export default function CourseCard({ course, progressPercent, onPress }: any) {
         <View style={styles.metaRow}>
           <View style={styles.ratingBox}>
             <MaterialCommunityIcons name="star" size={14} color="#D4AF37" />
-            <Text style={styles.ratingText}>{course.rating} ({course.reviews})</Text>
+            <Text style={styles.ratingText}>
+              {course.rating || '0.0'}
+              {course.reviews ? ` (${course.reviews})` : ''}
+            </Text>
           </View>
           <Text style={styles.durationText}>{course.total_duration}</Text>
         </View>
@@ -76,11 +79,11 @@ const styles = StyleSheet.create({
   content: { padding: 12 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   category: { fontSize: 10, color: '#D4AF37', fontWeight: '800', textTransform: 'uppercase' },
-  
+
   priceText: { fontSize: 14, fontWeight: '900' },
   paidText: { color: '#EF4444' }, // Red
   freeText: { color: '#10B981' }, // Green
-  
+
   title: { fontSize: 15, fontWeight: '700', color: '#1E293B', height: 40 },
   instructor: { fontSize: 12, color: '#64748B', marginTop: 2 },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
@@ -99,7 +102,7 @@ const styles = StyleSheet.create({
   freeBtnBg: { backgroundColor: '#10B981' }, // Green for Free
   payBtnBg: { backgroundColor: '#1E293B' },  // Dark for Pay Now
   actionButtonText: { color: '#FFF', fontSize: 12, fontWeight: '800', marginLeft: 8 },
-  
+
   progressSection: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 8 },
   progressBarBg: { height: 5, backgroundColor: '#E2E8F0', borderRadius: 10, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#D4AF37' },
